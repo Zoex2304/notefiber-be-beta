@@ -24,6 +24,7 @@ import (
 	"ai-notetaking-be/pkg/admin/usage"
 	"ai-notetaking-be/pkg/admin/user"
 	"ai-notetaking-be/pkg/embedding"
+	"ai-notetaking-be/pkg/embedding/jina"
 	"ai-notetaking-be/pkg/llm/factory"
 
 	pktNats "ai-notetaking-be/pkg/nats"
@@ -85,6 +86,9 @@ func NewContainer(db *gorm.DB, cfg *config.Config) *Container {
 			cfg.Ai.OllamaModel,
 		)
 		log.Printf("[INFO] Using Embedding Provider: OLLAMA (%s)", cfg.Ai.OllamaModel)
+	} else if cfg.Ai.EmbeddingProvider == "jina" {
+		embeddingProvider = jina.NewJinaProvider(cfg.Keys.Jina)
+		log.Printf("[INFO] Using Embedding Provider: JINA AI")
 	} else {
 		embeddingProvider = embedding.NewGeminiProvider(cfg.Keys.GoogleGemini)
 		log.Printf("[INFO] Using Embedding Provider: GEMINI")

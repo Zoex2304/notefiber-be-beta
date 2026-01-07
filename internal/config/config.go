@@ -42,6 +42,7 @@ type SMTPConfig struct {
 type APIKeys struct {
 	Geoapify     string
 	Binderbyte   string
+	Jina         string // Jina AI API Key
 	GoogleGemini string
 	HuggingFace  string // Hugging Face API Key
 	ExampleTopic string // Embedding topic
@@ -101,6 +102,7 @@ func Load() *Config {
 			Binderbyte:   getEnv("BINDERBYTE_API_KEY", ""),
 			GoogleGemini: getEnv("GOOGLE_GEMINI_API_KEY", ""),
 			HuggingFace:  getEnv("HUGGINGFACE_API_KEY", ""),
+			Jina:         getEnv("JINA_API_KEY", ""),
 			ExampleTopic: getEnv("EMBED_NOTE_CONTENT_TOPIC_NAME", "EMBED_NOTE_CONTENT"),
 		},
 		Ai: AIConfig{
