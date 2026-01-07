@@ -7,14 +7,13 @@ import (
 	"ai-notetaking-be/internal/bootstrap"
 	"ai-notetaking-be/internal/config"
 	"ai-notetaking-be/internal/server"
-	"ai-notetaking-be/internal/tracer"
 	"ai-notetaking-be/pkg/database"
 )
 
 func main() {
-	// 0. Initialize Tracer (for request flow tracing)
-	shutdownTracer := tracer.InitTracer()
-	defer shutdownTracer(context.Background())
+	// 0. Initialize Tracer - DISABLED
+	// shutdownTracer := tracer.InitTracer()
+	// defer shutdownTracer(context.Background())
 
 	// 1. Load Configuration
 	cfg := config.Load()

@@ -2,13 +2,11 @@ package server
 
 import (
 	"log"
-	"os"
 
 	"ai-notetaking-be/internal/bootstrap"
 	"ai-notetaking-be/internal/config"
 	"ai-notetaking-be/internal/pkg/serverutils"
 
-	"github.com/gofiber/contrib/otelfiber"
 	"github.com/gofiber/fiber/v2"
 	"github.com/gofiber/fiber/v2/middleware/cors"
 )
@@ -35,11 +33,10 @@ func New(cfg *config.Config, container *bootstrap.Container) *Server {
 		ExposeHeaders:    "Content-Length, Content-Type, Authorization",
 	}))
 
-	// OpenTelemetry tracing middleware (traces all HTTP requests)
-	// Only enable if OTEL_ENABLED is true
-	if os.Getenv("OTEL_ENABLED") == "true" {
-		app.Use(otelfiber.Middleware())
-	}
+	// OpenTelemetry tracing middleware - DISABLED
+	// if os.Getenv("OTEL_ENABLED") == "true" {
+	// 	app.Use(otelfiber.Middleware())
+	// }
 
 	app.Use(serverutils.ErrorHandlerMiddleware())
 
