@@ -76,7 +76,7 @@ func Load() *Config {
 
 	return &Config{
 		App: AppConfig{
-			Port:               getEnv("APP_PORT", "3000"),
+			Port:               getEnv("PORT", getEnv("APP_PORT", "3000")),
 			BaseURL:            getEnv("APP_BASE_URL", "http://localhost:3000"),
 			ClientURL:          getEnv("CLIENT_URL", "http://localhost:5173"),
 			Environment:        getEnv("GO_ENV", "development"),
