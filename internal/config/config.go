@@ -57,7 +57,21 @@ type AIConfig struct {
 
 func Load() *Config {
 	if err := godotenv.Load(); err != nil {
-		log.Println("Note: .env file not found, usage system environment")
+		log.Println("Note: .env file not found, using system environment variables")
+	}
+
+	// Get and validate database connection string
+	dbConnString := getEnv("DB_CONNECTION_STRING", "")
+	if dbConnString == "" {
+		log.Println("WARNING: DB_CONNECTION_STRING is empty!")
+	} else {
+		// Log masked connection string for debugging
+		if len(dbConnString) > 30 {
+			log.Printf("DB_CONNECTION_STRING loaded: %s...%s (length: %d)",
+				dbConnString[:15], dbConnString[len(dbConnString)-10:], len(dbConnString))
+		} else {
+			log.Printf("DB_CONNECTION_STRING loaded (length: %d)", len(dbConnString))
+		}
 	}
 
 	return &Config{
@@ -72,7 +86,7 @@ func Load() *Config {
 			RedisURL:           getEnv("REDIS_URL", "redis://localhost:6379"),
 		},
 		Database: DatabaseConfig{
-			Connection: getEnv("DB_CONNECTION_STRING", ""),
+			Connection: dbConnString,
 		},
 		SMTP: SMTPConfig{
 			Host:       getEnv("SMTP_HOST", ""),

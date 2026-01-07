@@ -70,6 +70,10 @@ func NewGormDB(cfg GormConfig) (*gorm.DB, error) {
 }
 
 func NewGormDBFromDSN(dsn string) (*gorm.DB, error) {
+	if dsn == "" {
+		return nil, fmt.Errorf("database DSN is empty - please set DB_CONNECTION_STRING environment variable")
+	}
+
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{
 		Logger: getLogger(),
 	})
