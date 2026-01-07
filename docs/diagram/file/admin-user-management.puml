@@ -1,0 +1,210 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **Admin Operations Flow**\nAdministrator Management & User Administration
+header Admin Operations Sequence
+footer Page 1 of 1
+
+actor "Admin Client" as Client
+boundary "Server" as Server
+control "Admin Controller" as Controller
+control "Auth Service" as AuthService
+control "Admin Service" as AdminService
+entity "User Repository" as UserRepo
+control "JWT Generator" as JWT
+control "Logger" as Logger
+database "Database" as DB
+
+autonumber "<b>[000]"
+
+== ADMIN LOGIN ==
+
+Client -[#CC3300]> Server : HTTP POST /api/admin/login\n{email, password}
+activate Client
+activate Server
+
+Server -[#CC3300]> Controller : Parse Credentials
+activate Controller
+
+Controller -> Controller : Validate Request
+Controller -[#CC3300]> AuthService : LoginAdmin
+activate AuthService
+
+AuthService -[#CC3300]> UserRepo : Find User by Email
+activate UserRepo
+UserRepo -[#CC3300]> DB : SELECT * FROM users WHERE email=?
+activate DB
+DB -[#006600]-> UserRepo : User Data
+deactivate DB
+UserRepo -[#006600]-> AuthService : User Entity
+deactivate UserRepo
+
+AuthService -> AuthService : Validate: Password + Role = Admin
+alt Validation Failed
+    AuthService -> AuthService : Throw "access denied: admins only"
+else Validation Passed
+    AuthService -[#CC6600]> JWT : Generate: JWT with role=admin claim
+    activate JWT
+    JWT -[#006600]-> AuthService : JWT Token
+    deactivate JWT
+    
+    AuthService -> AuthService : Build Login Response
+    AuthService -[#006600]> Controller : Token & Admin User Data
+end
+deactivate AuthService
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Token
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {access_token: "...", user: {...}}}
+deactivate Server
+deactivate Client
+
+== GET ALL USERS (Protected) ==
+
+Client -[#CC3300]> Server : HTTP GET /api/admin/users?page=1&limit=20
+activate Client
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> Controller : Parse Query Params
+activate Controller
+
+Controller -> Controller : Extract Pagination Params
+Controller -[#CC3300]> AdminService : GetAllUsers
+activate AdminService
+
+AdminService -[#CC3300]> UserRepo : FindAll/SearchUsers
+activate UserRepo
+
+UserRepo -> UserRepo : Build Specifications: Pagination + OrderBy
+UserRepo -[#CC3300]> DB : SELECT * FROM users\nORDER BY created_at DESC\nLIMIT ? OFFSET ?
+activate DB
+DB -[#006600]-> UserRepo : List of Users
+deactivate DB
+
+UserRepo -> UserRepo : Count Total Users
+UserRepo -[#CC3300]> DB : SELECT COUNT(*) FROM users
+activate DB
+DB -[#006600]-> UserRepo : Total Count
+deactivate DB
+
+UserRepo -[#006600]> AdminService : Users + Total Count
+deactivate UserRepo
+
+AdminService -> AdminService : Map: Entity -> DTO
+AdminService -> AdminService : Build Paginated Response
+AdminService -[#006600]> Controller : Paginated Users
+deactivate AdminService
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Paginated Users
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {\n  items: [...],\n  total: 100,\n  page: 1,\n  limit: 20\n}}
+deactivate Server
+deactivate Client
+
+== UPDATE USER (Protected) ==
+
+Client -[#CC3300]> Server : HTTP PUT /api/admin/users/:id\n{status, role}
+activate Client
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> Controller : Parse ID + Body
+activate Controller
+
+Controller -> Controller : Validate Update Data
+Controller -[#CC3300]> AdminService : UpdateUser
+activate AdminService
+
+AdminService -[#CC3300]> UserRepo : FindOne by ID
+activate UserRepo
+UserRepo -[#CC3300]> DB : SELECT * FROM users WHERE id=?
+activate DB
+DB -[#006600]-> UserRepo : User Data
+deactivate DB
+UserRepo -[#006600]-> AdminService : User Entity
+deactivate UserRepo
+
+AdminService -> AdminService : Update: Fields from Request
+AdminService -[#CC3300]> UserRepo : Save Changes
+activate UserRepo
+UserRepo -[#CC3300]> DB : UPDATE users SET status=?, role=?, updated_at=?
+activate DB
+DB -[#006600]-> UserRepo : Update Success
+deactivate DB
+UserRepo -[#006600]-> AdminService : Updated User
+deactivate UserRepo
+
+AdminService -[#CC6600]> Logger : Audit Log\n{action: "update_user", admin_id, user_id, changes}
+activate Logger
+Logger -> Logger : Write to Audit Log File
+Logger -[#006600]-> AdminService : Log Recorded
+deactivate Logger
+
+AdminService -[#006600]> Controller : Updated User
+deactivate AdminService
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Updated User
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {user: {...}}}
+deactivate Server
+deactivate Client
+
+== DELETE USER (Protected) ==
+
+Client -[#CC3300]> Server : HTTP DELETE /api/admin/users/:id
+activate Client
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> Controller : Parse ID
+activate Controller
+
+Controller -> Controller : Extract User ID
+Controller -[#CC3300]> AdminService : DeleteUser
+activate AdminService
+
+AdminService -[#CC3300]> UserRepo : Soft Delete
+activate UserRepo
+UserRepo -[#CC3300]> DB : UPDATE users SET deleted_at=NOW(), status='blocked'\nWHERE id=?
+activate DB
+DB -[#006600]-> UserRepo : User Soft Deleted
+deactivate DB
+UserRepo -[#006600]-> AdminService : Delete Success
+deactivate UserRepo
+
+AdminService -[#CC6600]> Logger : Audit Log\n{action: "delete_user", admin_id, user_id}
+activate Logger
+Logger -> Logger : Write to Audit Log File
+Logger -[#006600]-> AdminService : Log Recorded
+deactivate Logger
+
+AdminService -[#006600]> Controller : Delete Success
+deactivate AdminService
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response Success
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, message: "User deleted"}
+deactivate Server
+deactivate Client
+
+@enduml

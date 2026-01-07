@@ -1,0 +1,89 @@
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 13
+}
+
+title **Registration Flow**\nPOST /api/auth/register
+header API Registration Sequence
+footer Page 1 of 1
+
+actor "HTTP Client" as Client
+boundary "Server" as Server
+control "Controller" as Controller
+control "Service" as Service
+control "Unit of Work" as UoW
+entity "Repository" as Repository
+entity "Mapper" as Mapper
+entity "Model" as Model
+database "Database" as Database
+control "Mailer" as Mailer
+
+autonumber "<b>[000]"
+
+Client -[#CC3300]> Server : POST /api/auth/register
+activate Client
+
+Server -[#CC3300]> Controller : Routing & Middleware
+activate Server
+activate Controller
+
+Controller -> Controller : Parsing Request
+Controller -[#CC3300]> Service : Delegasi
+deactivate Controller
+activate Service
+
+Service -> Service : Orkestrasi Logika Bisnis
+Service -[#CC3300]> UoW : Manajemen Transaksi
+activate UoW
+
+UoW -[#CC3300]> Repository : Akses Data
+activate Repository
+
+Repository -[#CC3300]> Mapper : Transformasi
+activate Mapper
+
+Mapper -[#CC3300]> Model : Entity ↔ Model
+activate Model
+
+Model -[#CC3300]> Database : Persistensi
+activate Database
+
+Database -[#006600]-> Model : Success
+deactivate Database
+
+Model -[#006600]-> Mapper : Data
+deactivate Model
+
+Mapper -[#006600]-> Repository : Entity
+deactivate Mapper
+
+Repository -[#006600]-> Service : Result
+deactivate Repository
+
+UoW -> UoW : Commit Transaksi
+UoW -[#006600]-> Service : Completed
+deactivate UoW
+
+Service -[#CC6600]> Mailer : Pengiriman OTP Asynchronous
+activate Mailer
+Mailer -[#006600]-> Service : Email Queued
+deactivate Mailer
+
+Service -[#006600]-> Server : Response Data
+deactivate Service
+
+Server -> Server : Format HTTP Response
+Server -[#006600]-> Client : HTTP Response JSON
+deactivate Server
+
+Client -> Client : Process Response
+deactivate Client
+
+
+
+@enduml

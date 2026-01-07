@@ -1,0 +1,149 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 13
+}
+
+title **Google OAuth Flow**\nComplete Authentication with Google
+header Google OAuth 2.0 Authentication Sequence
+footer Page 1 of 1
+
+actor "User" as User
+actor "Browser" as Browser
+boundary "Server" as Server
+control "OAuth Controller" as OAuthCtrl
+control "OAuth Service" as OAuthService
+control "Unit of Work" as UoW
+entity "Repository" as Repository
+database "Database" as DB
+control "Google API" as GoogleAPI
+
+autonumber "<b>[000]"
+
+== FASE 1: Inisiasi Login ==
+
+User -> Browser : Click "Login with Google"
+activate User
+activate Browser
+
+Browser -[#CC3300]> Server : HTTP Request GET /api/auth/google
+deactivate Browser
+activate Server
+
+Server -[#CC3300]> OAuthCtrl : Routing
+activate OAuthCtrl
+
+OAuthCtrl -> OAuthCtrl : Trigger Login
+OAuthCtrl -[#CC3300]> OAuthService : Generate Login URL dengan State
+activate OAuthService
+
+OAuthService -> OAuthService : Generate State & Nonce
+OAuthService -> OAuthService : Build Google OAuth URL
+OAuthService -[#006600]-> OAuthCtrl : Google Authorization URL
+deactivate OAuthService
+
+OAuthCtrl -[#006600]-> Server : HTTP Redirect ke Google Authorization Page
+deactivate OAuthCtrl
+Server -[#006600]-> Browser : 302 Redirect to Google
+deactivate Server
+
+Browser -> GoogleAPI : Redirect to Google Authorization Page
+activate GoogleAPI
+GoogleAPI -> User : Show Google Login/Consent Screen
+activate User
+User -> GoogleAPI : Enter Credentials & Grant Permission
+deactivate User
+GoogleAPI --> Browser : Redirect with Authorization Code
+deactivate GoogleAPI
+deactivate Browser
+
+== FASE 2: Callback & Autentikasi ==
+
+Browser -[#CC3300]> Server : HTTP Request GET /api/auth/google/callback\n?code=xxx&state=yyy
+activate Browser
+activate Server
+
+Server -[#CC3300]> OAuthCtrl : Routing
+activate OAuthCtrl
+
+OAuthCtrl -> OAuthCtrl : Extract Authorization Code & State
+OAuthCtrl -> OAuthCtrl : Validate State
+OAuthCtrl -[#CC3300]> OAuthService : Orkestrasi Autentikasi
+activate OAuthService
+
+OAuthService -[#CC6600]> GoogleAPI : Exchange Code for Access Token
+activate GoogleAPI
+GoogleAPI -[#006600]-> OAuthService : Access Token
+deactivate GoogleAPI
+
+OAuthService -[#CC6600]> GoogleAPI : Fetch User Info
+activate GoogleAPI
+GoogleAPI -[#006600]-> OAuthService : User Info (email, name, etc.)
+deactivate GoogleAPI
+
+OAuthService -[#CC3300]> UoW : Akses Repository
+activate UoW
+
+UoW -[#CC3300]> Repository : Cari User by Email
+activate Repository
+Repository -[#CC3300]> DB : SELECT * FROM users WHERE email = ?
+activate DB
+DB -[#006600]-> Repository : User Data or Null
+deactivate DB
+
+alt User Found & Active
+    Repository -[#006600]-> OAuthService : Existing User Entity
+    deactivate Repository
+else User Not Found
+    Repository -[#990000]-> OAuthService : Null
+    deactivate Repository
+    
+    OAuthService -> OAuthService : Decision: Create New User
+    OAuthService -[#CC3300]> Repository : Create New User
+    activate Repository
+    Repository -[#CC3300]> DB : INSERT INTO users
+    activate DB
+    DB -[#006600]-> Repository : User Created
+    deactivate DB
+    Repository -[#006600]-> OAuthService : New User Entity
+    deactivate Repository
+else User Found but Soft-Deleted
+    OAuthService -> OAuthService : Decision: Restore User
+    OAuthService -[#CC3300]> Repository : Restore Soft-Deleted User
+    activate Repository
+    Repository -[#CC3300]> DB : UPDATE users SET deleted_at = NULL
+    activate DB
+    DB -[#006600]-> Repository : User Restored
+    deactivate DB
+    Repository -[#006600]-> OAuthService : Restored User Entity
+    deactivate Repository
+end
+
+UoW -> UoW : Close Transaction
+UoW -[#006600]-> OAuthService : Data Ready
+deactivate UoW
+
+OAuthService -> OAuthService : Repository: Persist User & Provider Info
+OAuthService -> OAuthService : Generasi JWT Access Token
+OAuthService -[#006600]-> OAuthCtrl : JWT Token + User Info
+deactivate OAuthService
+
+OAuthCtrl -> OAuthCtrl : Package Token in Redirect
+OAuthCtrl -[#006600]-> Server : HTTP Redirect ke Frontend dengan Token
+deactivate OAuthCtrl
+
+Server -[#006600]-> Browser : 302 Redirect to Frontend\nwith token in URL/query
+deactivate Server
+
+Browser -> Browser : Extract Token & Store
+Browser -> Browser : Redirect to Dashboard
+deactivate Browser
+deactivate User
+
+@enduml
+

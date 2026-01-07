@@ -1,0 +1,1267 @@
+﻿============================================================
+BULKCOLLECT FULL EXPORT
+Date: 2025-12-24 15:57:19
+Total Files: 19
+Total Size: 0.03 MB
+============================================================
+
+>>> FILE: note_controller.go
+package controller
+
+import (
+	"ai-notetaking-be/internal/dto"
+	"ai-notetaking-be/internal/pkg/serverutils"
+	"ai-notetaking-be/internal/service"
+
+	"github.com/gofiber/fiber/v2"
+	"github.com/google/uuid"
+)
+
+type INoteController interface {
+	RegisterRoutes(r fiber.Router)
+	Create(ctx *fiber.Ctx) error
+	Show(ctx *fiber.Ctx) error
+	Update(ctx *fiber.Ctx) error
+	Delete(ctx *fiber.Ctx) error
+	MoveNote(ctx *fiber.Ctx) error
+	SemanticSearch(ctx *fiber.Ctx) error
+}
+
+type noteController struct {
+	noteService service.INoteService
+}
+
+func NewNoteController(noteService service.INoteService) INoteController {
+	return &noteController{
+		noteService: noteService,
+	}
+}
+
+func (c *noteController) RegisterRoutes(r fiber.Router) {
+	h := r.Group("/note/v1")
+	h.Use(serverutils.JwtMiddleware) // âœ… PROTECTED: Wajib login
+	h.Get("semantic-search", c.SemanticSearch)
+	h.Post("", c.Create)
+	h.Get(":id", c.Show)
+	h.Put(":id", c.Update)
+	h.Put(":id/move", c.MoveNote)
+	h.Delete(":id", c.Delete)
+}
+
+func (c *noteController) Create(ctx *fiber.Ctx) error {
+	// 1. Ambil User ID dari Token
+	userIdStr := ctx.Locals("user_id").(string)
+	userId, _ := uuid.Parse(userIdStr)
+
+	var req dto.CreateNoteRequest
+	if err := ctx.BodyParser(&req); err != nil {
+		return err
+	}
+
+	err := serverutils.ValidateRequest(req)
+	if err != nil {
+		return err
+	}
+
+	// 2. Kirim userId ke Service
+	res, err := c.noteService.Create(ctx.Context(), userId, &req)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(serverutils.SuccessResponse("Success create note", res))
+}
+
+func (c *noteController) Show(ctx *fiber.Ctx) error {
+	// 1. Ambil User ID dari Token
+	userIdStr := ctx.Locals("user_id").(string)
+	userId, _ := uuid.Parse(userIdStr)
+	
+	idParam := ctx.Params("id")
+	id, _ := uuid.Parse(idParam)
+
+	// 2. Kirim userId ke Service
+	res, err := c.noteService.Show(ctx.Context(), userId, id)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(serverutils.SuccessResponse("Success show note", res))
+}
+
+func (c *noteController) Update(ctx *fiber.Ctx) error {
+	// 1. Ambil User ID dari Token
+	userIdStr := ctx.Locals("user_id").(string)
+	userId, _ := uuid.Parse(userIdStr)
+
+	idParam := ctx.Params("id")
+	id, _ := uuid.Parse(idParam)
+
+	var req dto.UpdateNoteRequest
+	if err := ctx.BodyParser(&req); err != nil {
+		return err
+	}
+	req.Id = id
+
+	err := serverutils.ValidateRequest(req)
+	if err != nil {
+		return err
+	}
+
+	// 2. Kirim userId ke Service
+	res, err := c.noteService.Update(ctx.Context(), userId, &req)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(serverutils.SuccessResponse("Success update note", res))
+}
+
+func (c *noteController) Delete(ctx *fiber.Ctx) error {
+	// 1. Ambil User ID dari Token
+	userIdStr := ctx.Locals("user_id").(string)
+	userId, _ := uuid.Parse(userIdStr)
+
+	idParam := ctx.Params("id")
+	id, _ := uuid.Parse(idParam)
+
+	// 2. Kirim userId ke Service
+	err := c.noteService.Delete(ctx.Context(), userId, id)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(serverutils.SuccessResponse[any]("Success delete note", nil))
+}
+
+func (c *noteController) MoveNote(ctx *fiber.Ctx) error {
+	// 1. Ambil User ID dari Token
+	userIdStr := ctx.Locals("user_id").(string)
+	userId, _ := uuid.Parse(userIdStr)
+
+	idParam := ctx.Params("id")
+	id, _ := uuid.Parse(idParam)
+
+	var req dto.MoveNoteRequest
+	if err := ctx.BodyParser(&req); err != nil {
+		return err
+	}
+	req.Id = id
+
+	err := serverutils.ValidateRequest(req)
+	if err != nil {
+		return err
+	}
+
+	// 2. Kirim userId ke Service
+	res, err := c.noteService.MoveNote(ctx.Context(), userId, &req)
+	if err != nil {
+		return err
+	}
+
+	return ctx.JSON(serverutils.SuccessResponse("Success move note", res))
+}
+
+func (c *noteController) SemanticSearch(ctx *fiber.Ctx) error {
+	// 1. Ambil User ID dari Token
+	userIdStr := ctx.Locals("user_id").(string)
+	userId, _ := uuid.Parse(userIdStr)
+
+	q := ctx.Query("q", "")
+
+	// 2. Kirim userId ke Service
+	res, err := c.noteService.SemanticSearch(ctx.Context(), userId, q)
+	if err != nil {
+		// Handle Guard Error (403)
+		if err.Error() == "feature requires pro plan" {
+			return ctx.Status(fiber.StatusForbidden).JSON(serverutils.ErrorResponse(403, "Feature requires Pro Plan"))
+		}
+		return err
+	}
+
+	return ctx.JSON(serverutils.SuccessResponse("Success semantic search notes", res))
+}
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\dto\note_dto.go
+package dto
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type CreateNoteRequest struct {
+	Title      string    `json:"title" validate:"required"`
+	Content    string    `json:"content"`
+	NotebookId uuid.UUID `json:"notebook_id" validate:"required"`
+}
+
+type CreateNoteResponse struct {
+	Id uuid.UUID `json:"id"`
+}
+
+type ShowNoteResponse struct {
+	Id         uuid.UUID  `json:"id"`
+	Title      string     `json:"title"`
+	Content    string     `json:"content"`
+	NotebookId uuid.UUID  `json:"notebook_id"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  *time.Time `json:"updated_at"`
+}
+
+type UpdateNoteRequest struct {
+	Id      uuid.UUID
+	Title   string `json:"title" validate:"required"`
+	Content string `json:"content"`
+}
+
+type UpdateNoteResponse struct {
+	Id uuid.UUID `json:"id"`
+}
+
+type MoveNoteRequest struct {
+	Id         uuid.UUID
+	NotebookId uuid.UUID `json:"notebook_id" validate:"required"`
+}
+
+type MoveNoteResponse struct {
+	Id uuid.UUID `json:"id"`
+}
+
+type SemanticSearchResponse struct {
+	Id         uuid.UUID  `json:"id"`
+	Title      string     `json:"title"`
+	Content    string     `json:"content"`
+	NotebookId uuid.UUID  `json:"notebook_id"`
+	CreatedAt  time.Time  `json:"created_at"`
+	UpdatedAt  *time.Time `json:"updated_at"`
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\service\note_service.go
+// FILE: internal/service/note_service.go
+package service
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"time"
+
+	"ai-notetaking-be/internal/dto"
+	"ai-notetaking-be/internal/entity"
+	"ai-notetaking-be/internal/repository/specification"
+	"ai-notetaking-be/internal/repository/unitofwork"
+	"ai-notetaking-be/pkg/embedding"
+
+	"github.com/google/uuid"
+)
+
+type INoteService interface {
+	Create(ctx context.Context, userId uuid.UUID, req *dto.CreateNoteRequest) (*dto.CreateNoteResponse, error)
+	Show(ctx context.Context, userId uuid.UUID, id uuid.UUID) (*dto.ShowNoteResponse, error)
+	Update(ctx context.Context, userId uuid.UUID, req *dto.UpdateNoteRequest) (*dto.UpdateNoteResponse, error)
+	Delete(ctx context.Context, userId uuid.UUID, id uuid.UUID) error
+	MoveNote(ctx context.Context, userId uuid.UUID, req *dto.MoveNoteRequest) (*dto.MoveNoteResponse, error)
+	SemanticSearch(ctx context.Context, userId uuid.UUID, search string) ([]*dto.SemanticSearchResponse, error)
+}
+
+type noteService struct {
+	uowFactory       unitofwork.RepositoryFactory
+	publisherService IPublisherService
+}
+
+func NewNoteService(
+	uowFactory unitofwork.RepositoryFactory,
+	publisherService IPublisherService,
+) INoteService {
+	return &noteService{
+		uowFactory:       uowFactory,
+		publisherService: publisherService,
+	}
+}
+
+func (c *noteService) Create(ctx context.Context, userId uuid.UUID, req *dto.CreateNoteRequest) (*dto.CreateNoteResponse, error) {
+	uow := c.uowFactory.NewUnitOfWork(ctx)
+	note := entity.Note{
+		Id:         uuid.New(),
+		Title:      req.Title,
+		Content:    req.Content,
+		NotebookId: req.NotebookId,
+		UserId:     userId,
+		CreatedAt:  time.Now(),
+	}
+
+	err := uow.NoteRepository().Create(ctx, &note)
+	if err != nil {
+		return nil, err
+	}
+
+	msgPayload := dto.PublishEmbedNoteMessage{
+		NoteId: note.Id,
+	}
+	msgJson, err := json.Marshal(msgPayload)
+	if err != nil {
+		return nil, err
+	}
+
+	err = c.publisherService.Publish(ctx, msgJson)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.CreateNoteResponse{
+		Id: note.Id,
+	}, nil
+}
+
+func (c *noteService) Show(ctx context.Context, userId uuid.UUID, id uuid.UUID) (*dto.ShowNoteResponse, error) {
+	uow := c.uowFactory.NewUnitOfWork(ctx)
+	note, err := uow.NoteRepository().FindOne(ctx,
+		specification.ByID{ID: id},
+		specification.UserOwnedBy{UserID: userId},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if note == nil {
+		return nil, nil // Not found
+	}
+
+	res := dto.ShowNoteResponse{
+		Id:         note.Id,
+		Title:      note.Title,
+		Content:    note.Content,
+		NotebookId: note.NotebookId,
+		CreatedAt:  note.CreatedAt,
+		UpdatedAt:  note.UpdatedAt,
+	}
+
+	return &res, nil
+}
+
+func (c *noteService) Update(ctx context.Context, userId uuid.UUID, req *dto.UpdateNoteRequest) (*dto.UpdateNoteResponse, error) {
+	uow := c.uowFactory.NewUnitOfWork(ctx)
+
+	note, err := uow.NoteRepository().FindOne(ctx,
+		specification.ByID{ID: req.Id},
+		specification.UserOwnedBy{UserID: userId},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if note == nil {
+		return nil, nil
+	}
+
+	now := time.Now()
+
+	note.Title = req.Title
+	note.Content = req.Content
+	note.UpdatedAt = &now
+
+	err = uow.NoteRepository().Update(ctx, note)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := dto.PublishEmbedNoteMessage{
+		NoteId: note.Id,
+	}
+	payloadJson, _ := json.Marshal(payload)
+	err = c.publisherService.Publish(ctx, payloadJson)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.UpdateNoteResponse{
+		Id: note.Id,
+	}, nil
+}
+
+func (c *noteService) Delete(ctx context.Context, userId uuid.UUID, id uuid.UUID) error {
+	uow := c.uowFactory.NewUnitOfWork(ctx)
+
+	note, err := uow.NoteRepository().FindOne(ctx,
+		specification.ByID{ID: id},
+		specification.UserOwnedBy{UserID: userId},
+	)
+	if err != nil {
+		return err
+	}
+	if note == nil {
+		return nil
+	}
+
+	if err := uow.Begin(ctx); err != nil {
+		return err
+	}
+	defer uow.Rollback()
+
+	if err := uow.NoteRepository().Delete(ctx, id); err != nil {
+		return err
+	}
+
+	if err := uow.NoteEmbeddingRepository().DeleteByNoteId(ctx, id); err != nil {
+		return err
+	}
+
+	return uow.Commit()
+}
+
+func (c *noteService) MoveNote(ctx context.Context, userId uuid.UUID, req *dto.MoveNoteRequest) (*dto.MoveNoteResponse, error) {
+	uow := c.uowFactory.NewUnitOfWork(ctx)
+	note, err := uow.NoteRepository().FindOne(ctx,
+		specification.ByID{ID: req.Id},
+		specification.UserOwnedBy{UserID: userId},
+	)
+	if err != nil {
+		return nil, err
+	}
+	if note == nil {
+		return nil, nil
+	}
+
+	now := time.Now()
+	note.NotebookId = req.NotebookId
+	note.UpdatedAt = &now
+
+	err = uow.NoteRepository().Update(ctx, note)
+	if err != nil {
+		return nil, err
+	}
+
+	payload := dto.PublishEmbedNoteMessage{
+		NoteId: note.Id,
+	}
+	payloadJson, _ := json.Marshal(payload)
+	err = c.publisherService.Publish(ctx, payloadJson)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.MoveNoteResponse{
+		Id: note.Id,
+	}, nil
+}
+
+func (c *noteService) SemanticSearch(ctx context.Context, userId uuid.UUID, search string) ([]*dto.SemanticSearchResponse, error) {
+	uow := c.uowFactory.NewUnitOfWork(ctx)
+
+	// Helper to GetActiveByUserId
+	// We use FindAllSubscriptions + filter active logic (reused from PaymentService thought process, or just find any active)
+	subs, err := uow.SubscriptionRepository().FindAllSubscriptions(ctx, specification.UserOwnedBy{UserID: userId})
+	if err != nil {
+		return nil, err
+	}
+
+	var activeSub *entity.UserSubscription
+	for _, s := range subs {
+		if s.Status == entity.SubscriptionStatusActive {
+			activeSub = s
+			break
+		}
+	}
+
+	if activeSub == nil {
+		return nil, fmt.Errorf("feature requires pro plan")
+	}
+
+	plan, err := uow.SubscriptionRepository().FindOnePlan(ctx, specification.ByID{ID: activeSub.PlanId})
+	if err != nil || plan == nil || !plan.SemanticSearchEnabled {
+		return nil, fmt.Errorf("feature requires pro plan")
+	}
+
+	embeddingRes, err := embedding.GetGeminiEmbedding(
+		os.Getenv("GOOGLE_GEMINI_API_KEY"),
+		search,
+		"RETRIEVAL_QUERY",
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	// Search Similar
+	noteEmbeddings, err := uow.NoteEmbeddingRepository().SearchSimilar(ctx, embeddingRes.Embedding.Values, 10, userId)
+	if err != nil {
+		return nil, err
+	}
+
+	ids := make([]uuid.UUID, 0)
+	for _, ne := range noteEmbeddings {
+		ids = append(ids, ne.NoteId)
+	}
+
+	if len(ids) == 0 {
+		return []*dto.SemanticSearchResponse{}, nil
+	}
+
+	// Fetch Notes by IDs and UserID (security filter)
+	notes, err := uow.NoteRepository().FindAll(ctx, specification.ByIDs{IDs: ids}, specification.UserOwnedBy{UserID: userId})
+	if err != nil {
+		return nil, err
+	}
+
+	response := make([]*dto.SemanticSearchResponse, 0)
+	// Preserve order of Embeddings (relevance)
+	for _, ne := range noteEmbeddings {
+		for _, note := range notes {
+			if ne.NoteId == note.Id {
+				response = append(response, &dto.SemanticSearchResponse{
+					Id:         note.Id,
+					Title:      note.Title,
+					Content:    note.Content,
+					NotebookId: note.NotebookId,
+					CreatedAt:  note.CreatedAt,
+					UpdatedAt:  note.UpdatedAt,
+				})
+				break
+			}
+		}
+	}
+
+	return response, nil
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\contract\note_repository.go
+package contract
+
+import (
+	"context"
+
+	"ai-notetaking-be/internal/entity"
+	"ai-notetaking-be/internal/repository/specification"
+
+	"github.com/google/uuid"
+)
+
+type NoteRepository interface {
+	Create(ctx context.Context, note *entity.Note) error
+	Update(ctx context.Context, note *entity.Note) error
+	Delete(ctx context.Context, id uuid.UUID) error
+	FindOne(ctx context.Context, specs ...specification.Specification) (*entity.Note, error)
+	FindAll(ctx context.Context, specs ...specification.Specification) ([]*entity.Note, error)
+	Count(ctx context.Context, specs ...specification.Specification) (int64, error)
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\implementation\note_repository_impl.go
+package implementation
+
+import (
+	"context"
+	"errors"
+
+	"ai-notetaking-be/internal/entity"
+	"ai-notetaking-be/internal/mapper"
+	"ai-notetaking-be/internal/model"
+	"ai-notetaking-be/internal/repository/contract"
+	"ai-notetaking-be/internal/repository/specification"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type NoteRepositoryImpl struct {
+	db     *gorm.DB
+	mapper *mapper.NoteMapper
+}
+
+func NewNoteRepository(db *gorm.DB) contract.NoteRepository {
+	return &NoteRepositoryImpl{
+		db:     db,
+		mapper: mapper.NewNoteMapper(),
+	}
+}
+
+func (r *NoteRepositoryImpl) applySpecifications(db *gorm.DB, specs ...specification.Specification) *gorm.DB {
+	for _, spec := range specs {
+		db = spec.Apply(db)
+	}
+	return db
+}
+
+func (r *NoteRepositoryImpl) Create(ctx context.Context, note *entity.Note) error {
+	m := r.mapper.ToModel(note)
+	if err := r.db.WithContext(ctx).Create(m).Error; err != nil {
+		return err
+	}
+	*note = *r.mapper.ToEntity(m)
+	return nil
+}
+
+func (r *NoteRepositoryImpl) Update(ctx context.Context, note *entity.Note) error {
+	m := r.mapper.ToModel(note)
+	if err := r.db.WithContext(ctx).Save(m).Error; err != nil {
+		return err
+	}
+	*note = *r.mapper.ToEntity(m)
+	return nil
+}
+
+func (r *NoteRepositoryImpl) Delete(ctx context.Context, id uuid.UUID) error {
+	return r.db.WithContext(ctx).Delete(&model.Note{}, id).Error
+}
+
+func (r *NoteRepositoryImpl) FindOne(ctx context.Context, specs ...specification.Specification) (*entity.Note, error) {
+	var m model.Note
+	query := r.applySpecifications(r.db.WithContext(ctx), specs...)
+	if err := query.First(&m).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return r.mapper.ToEntity(&m), nil
+}
+
+func (r *NoteRepositoryImpl) FindAll(ctx context.Context, specs ...specification.Specification) ([]*entity.Note, error) {
+	var models []*model.Note
+	query := r.applySpecifications(r.db.WithContext(ctx), specs...)
+	if err := query.Find(&models).Error; err != nil {
+		return nil, err
+	}
+	return r.mapper.ToEntities(models), nil
+}
+
+func (r *NoteRepositoryImpl) Count(ctx context.Context, specs ...specification.Specification) (int64, error) {
+	var count int64
+	query := r.applySpecifications(r.db.WithContext(ctx).Model(&model.Note{}), specs...)
+	if err := query.Count(&count).Error; err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\mapper\note_mapper.go
+package mapper
+
+import (
+	"time"
+
+	"ai-notetaking-be/internal/entity"
+	"ai-notetaking-be/internal/model"
+
+	"gorm.io/gorm"
+)
+
+type NoteMapper struct{}
+
+func NewNoteMapper() *NoteMapper {
+	return &NoteMapper{}
+}
+
+func (m *NoteMapper) ToEntity(n *model.Note) *entity.Note {
+	if n == nil {
+		return nil
+	}
+
+	var deletedAt *time.Time
+	if n.DeletedAt.Valid {
+		t := n.DeletedAt.Time
+		deletedAt = &t
+	}
+
+	var updatedAt *time.Time
+	if !n.UpdatedAt.IsZero() {
+		t := n.UpdatedAt
+		updatedAt = &t
+	}
+
+	return &entity.Note{
+		Id:         n.Id,
+		Title:      n.Title,
+		Content:    n.Content,
+		NotebookId: n.NotebookId,
+		UserId:     n.UserId,
+		CreatedAt:  n.CreatedAt,
+		UpdatedAt:  updatedAt,
+		DeletedAt:  deletedAt,
+		IsDeleted:  n.DeletedAt.Valid,
+	}
+}
+
+func (m *NoteMapper) ToModel(n *entity.Note) *model.Note {
+	if n == nil {
+		return nil
+	}
+
+	var deletedAt gorm.DeletedAt
+	if n.DeletedAt != nil {
+		deletedAt = gorm.DeletedAt{Time: *n.DeletedAt, Valid: true}
+	} else if n.IsDeleted {
+		deletedAt = gorm.DeletedAt{Time: time.Now(), Valid: true}
+	}
+
+	var updatedAt time.Time
+	if n.UpdatedAt != nil {
+		updatedAt = *n.UpdatedAt
+	}
+
+	return &model.Note{
+		Id:         n.Id,
+		Title:      n.Title,
+		Content:    n.Content,
+		NotebookId: n.NotebookId,
+		UserId:     n.UserId,
+		CreatedAt:  n.CreatedAt,
+		UpdatedAt:  updatedAt,
+		DeletedAt:  deletedAt,
+	}
+}
+
+func (m *NoteMapper) ToEntities(notes []*model.Note) []*entity.Note {
+	entities := make([]*entity.Note, len(notes))
+	for i, n := range notes {
+		entities[i] = m.ToEntity(n)
+	}
+	return entities
+}
+
+func (m *NoteMapper) ToModels(notes []*entity.Note) []*model.Note {
+	models := make([]*model.Note, len(notes))
+	for i, n := range notes {
+		models[i] = m.ToModel(n)
+	}
+	return models
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\entity\note_entity.go
+package entity
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type Note struct {
+	Id         uuid.UUID
+	Title      string
+	Content    string
+	NotebookId uuid.UUID
+	UserId     uuid.UUID
+	CreatedAt  time.Time
+	UpdatedAt  *time.Time
+	DeletedAt  *time.Time
+	IsDeleted  bool
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\model\note_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type Note struct {
+	Id         uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Title      string         `gorm:"type:varchar(255);not null"`
+	Content    string         `gorm:"type:text"`
+	NotebookId uuid.UUID      `gorm:"type:uuid;not null;index"`
+	UserId     uuid.UUID      `gorm:"type:uuid;not null;index"`
+	CreatedAt  time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt  time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
+}
+
+func (Note) TableName() string {
+	return "notes"
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\specification\chat_specifications.go
+package specification
+
+import (
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type ByChatSessionID struct {
+	ChatSessionID uuid.UUID
+}
+
+func (s ByChatSessionID) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("chat_session_id = ?", s.ChatSessionID)
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\specification\common_specifications.go
+package specification
+
+import (
+	"fmt"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+// ByID filters by ID
+type ByID struct {
+	ID uuid.UUID
+}
+
+func (s ByID) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("id = ?", s.ID)
+}
+
+// ByIDs filters by a list of IDs
+type ByIDs struct {
+	IDs []uuid.UUID
+}
+
+func (s ByIDs) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("id IN ?", s.IDs)
+}
+
+// OrderBy applies ordering
+type OrderBy struct {
+	Field string
+	Desc  bool
+}
+
+func (s OrderBy) Apply(db *gorm.DB) *gorm.DB {
+	direction := "ASC"
+	if s.Desc {
+		direction = "DESC"
+	}
+	return db.Order(fmt.Sprintf("%s %s", s.Field, direction))
+}
+
+// NotDeleted filters out soft-deleted records (explicitly)
+// Note: GORM handles soft delete automatically if DeletedAt is present,
+// but this can be used to be explicit or if global scope is disabled.
+type NotDeleted struct{}
+
+func (s NotDeleted) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("deleted_at IS NULL")
+}
+
+// Pagination
+type Pagination struct {
+	Limit  int
+	Offset int
+}
+
+func (s Pagination) Apply(db *gorm.DB) *gorm.DB {
+	return db.Limit(s.Limit).Offset(s.Offset)
+}
+
+// FilterBy Generic Filter
+type FilterBy struct {
+	Field string
+	Value interface{}
+}
+
+func (s FilterBy) Apply(db *gorm.DB) *gorm.DB {
+	query := fmt.Sprintf("%s = ?", s.Field)
+	return db.Where(query, s.Value)
+}
+
+func Filter(field string, value interface{}) Specification {
+	return FilterBy{Field: field, Value: value}
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\specification\notebook_specifications.go
+package specification
+
+import (
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type ByParentID struct {
+	ParentID *uuid.UUID
+}
+
+func (s ByParentID) Apply(db *gorm.DB) *gorm.DB {
+	if s.ParentID == nil {
+		return db.Where("parent_id IS NULL")
+	}
+	return db.Where("parent_id = ?", s.ParentID)
+}
+
+// ByIDs is already in common_specifications, but we might want a domain specific alias or just use common?
+// Using common is fine.
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\specification\note_specifications.go
+package specification
+
+import (
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type ByNotebookID struct {
+	NotebookID uuid.UUID
+}
+
+func (s ByNotebookID) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("notebook_id = ?", s.NotebookID)
+}
+
+type ByNotebookIDs struct {
+	NotebookIDs []uuid.UUID
+}
+
+func (s ByNotebookIDs) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("notebook_id IN ?", s.NotebookIDs)
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\specification\specification.go
+package specification
+
+import "gorm.io/gorm"
+
+// Specification defines the interface for query specifications
+type Specification interface {
+	Apply(db *gorm.DB) *gorm.DB
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\specification\user_specifications.go
+package specification
+
+import (
+	"gorm.io/gorm"
+
+	"github.com/google/uuid"
+)
+
+type ByEmail struct {
+	Email string
+}
+
+func (s ByEmail) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("email = ?", s.Email)
+}
+
+type UserOwnedBy struct {
+	UserID uuid.UUID
+}
+
+func (s UserOwnedBy) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("user_id = ?", s.UserID)
+}
+
+type ActiveUsers struct{}
+
+func (s ActiveUsers) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("status = ?", "active")
+}
+
+// Token Specs
+
+type ByToken struct {
+	Token string
+}
+
+func (s ByToken) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("token = ?", s.Token)
+}
+
+type ByTokenHash struct {
+	Hash string
+}
+
+func (s ByTokenHash) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("token_hash = ?", s.Hash)
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\unitofwork\repository_factory.go
+package unitofwork
+
+import "context"
+
+type RepositoryFactory interface {
+	NewUnitOfWork(ctx context.Context) UnitOfWork
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\unitofwork\repository_factory_impl.go
+package unitofwork
+
+import (
+	"context"
+
+	"gorm.io/gorm"
+)
+
+type RepositoryFactoryImpl struct {
+	db *gorm.DB
+}
+
+func NewRepositoryFactory(db *gorm.DB) RepositoryFactory {
+	return &RepositoryFactoryImpl{
+		db: db,
+	}
+}
+
+func (f *RepositoryFactoryImpl) NewUnitOfWork(ctx context.Context) UnitOfWork {
+	// Usually UoW is short lived per request.
+	// We pass the global DB instance.
+	// The context can be used when calling Begin(), or explicitly passed to repos.
+	// Here we just init the UoW.
+	return NewUnitOfWork(f.db)
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\unitofwork\unit_of_work.go
+package unitofwork
+
+import (
+	"context"
+
+	"ai-notetaking-be/internal/repository/contract"
+)
+
+type UnitOfWork interface {
+	Begin(ctx context.Context) error
+	Commit() error
+	Rollback() error
+
+	UserRepository() contract.UserRepository
+	NotebookRepository() contract.NotebookRepository
+	NoteRepository() contract.NoteRepository
+	NoteEmbeddingRepository() contract.NoteEmbeddingRepository
+
+	ChatSessionRepository() contract.ChatSessionRepository
+	ChatMessageRepository() contract.ChatMessageRepository
+	ChatMessageRawRepository() contract.ChatMessageRawRepository
+
+	SubscriptionRepository() contract.SubscriptionRepository
+	FeatureRepository() contract.FeatureRepository
+	BillingRepository() contract.BillingRepository
+	RefundRepository() contract.RefundRepository
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\repository\unitofwork\unit_of_work_impl.go
+package unitofwork
+
+import (
+	"context"
+	"fmt"
+
+	"ai-notetaking-be/internal/repository/contract"
+	"ai-notetaking-be/internal/repository/implementation"
+
+	"gorm.io/gorm"
+)
+
+type UnitOfWorkImpl struct {
+	db *gorm.DB
+	tx *gorm.DB // The active transaction (or just db if no tx) - actually we should keep track if we are in tx
+}
+
+func NewUnitOfWork(db *gorm.DB) UnitOfWork {
+	return &UnitOfWorkImpl{
+		db: db,
+	}
+}
+
+func (u *UnitOfWorkImpl) getDB() *gorm.DB {
+	if u.tx != nil {
+		return u.tx
+	}
+	return u.db
+}
+
+func (u *UnitOfWorkImpl) Begin(ctx context.Context) error {
+	if u.tx != nil {
+		return fmt.Errorf("transaction already started")
+	}
+	u.tx = u.db.WithContext(ctx).Begin()
+	return u.tx.Error
+}
+
+func (u *UnitOfWorkImpl) Commit() error {
+	if u.tx == nil {
+		return fmt.Errorf("no transaction to commit")
+	}
+	err := u.tx.Commit().Error
+	u.tx = nil
+	return err
+}
+
+func (u *UnitOfWorkImpl) Rollback() error {
+	if u.tx == nil {
+		return fmt.Errorf("no transaction to rollback")
+	}
+	err := u.tx.Rollback().Error
+	u.tx = nil
+	return err
+}
+
+// Repository Accessors
+
+func (u *UnitOfWorkImpl) UserRepository() contract.UserRepository {
+	return implementation.NewUserRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) NotebookRepository() contract.NotebookRepository {
+	return implementation.NewNotebookRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) NoteRepository() contract.NoteRepository {
+	return implementation.NewNoteRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) NoteEmbeddingRepository() contract.NoteEmbeddingRepository {
+	return implementation.NewNoteEmbeddingRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) ChatSessionRepository() contract.ChatSessionRepository {
+	return implementation.NewChatSessionRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) ChatMessageRepository() contract.ChatMessageRepository {
+	return implementation.NewChatMessageRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) ChatMessageRawRepository() contract.ChatMessageRawRepository {
+	return implementation.NewChatMessageRawRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) SubscriptionRepository() contract.SubscriptionRepository {
+	return implementation.NewSubscriptionRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) FeatureRepository() contract.FeatureRepository {
+	return implementation.NewFeatureRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) BillingRepository() contract.BillingRepository {
+	return implementation.NewBillingRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) RefundRepository() contract.RefundRepository {
+	return implementation.NewRefundRepository(u.getDB())
+}
+
+
+
+>>> FILE: D:\notetaker\notefiber-BE\internal\bootstrap\container.go
+package bootstrap
+
+import (
+	"ai-notetaking-be/internal/config"
+	"ai-notetaking-be/internal/controller"
+	"ai-notetaking-be/internal/pkg/logger"
+	"ai-notetaking-be/internal/pkg/mailer"
+	"ai-notetaking-be/internal/repository/unitofwork"
+	"ai-notetaking-be/internal/service"
+
+	"github.com/ThreeDotsLabs/watermill"
+	"github.com/ThreeDotsLabs/watermill/pubsub/gochannel"
+	"gorm.io/gorm"
+)
+
+type Container struct {
+	// Controllers
+	NotebookController controller.INotebookController
+	NoteController     controller.INoteController
+	UserController     controller.IUserController
+	AuthController     controller.IAuthController
+	OAuthController    controller.IOAuthController
+	AdminController    controller.IAdminController
+	PaymentController  controller.IPaymentController
+	ChatbotController  controller.IChatbotController
+	LocationController controller.ILocationController
+	PlanController     controller.PlanController
+
+	// Background Services (Exposed for main.go to run)
+	ConsumerService service.IConsumerService
+}
+
+func NewContainer(db *gorm.DB, cfg *config.Config) *Container {
+	// 1. Core Facades
+	// 1. Core Facades
+	uowFactory := unitofwork.NewRepositoryFactory(db)
+	sysLogger := logger.NewZapLogger(cfg.App.LogFilePath, cfg.App.Environment == "production")
+
+	emailService := mailer.NewEmailService(
+		cfg.SMTP.Host,
+		cfg.SMTP.Port,
+		cfg.SMTP.Email,
+		cfg.SMTP.Password,
+		cfg.SMTP.SenderName,
+	)
+
+	// 2. Event Bus
+	watermillLogger := watermill.NewStdLogger(false, false)
+	pubSub := gochannel.NewGoChannel(
+		gochannel.Config{},
+		watermillLogger,
+	)
+
+	// 3. Services
+	publisherService := service.NewPublisherService(cfg.Keys.ExampleTopic, pubSub)
+	consumerService := service.NewConsumerService(pubSub, cfg.Keys.ExampleTopic, uowFactory)
+
+	userService := service.NewUserService(uowFactory)
+	authService := service.NewAuthService(uowFactory, emailService)
+	oauthService := service.NewOAuthService(uowFactory)
+
+	notebookService := service.NewNotebookService(uowFactory, publisherService)
+	noteService := service.NewNoteService(uowFactory, publisherService)
+
+	chatbotService := service.NewChatbotService(uowFactory)
+	paymentService := service.NewPaymentService(uowFactory)
+	adminService := service.NewAdminService(uowFactory, sysLogger)
+
+	locationService := service.NewLocationService(cfg.Keys.Geoapify, cfg.Keys.Binderbyte)
+	planService := service.NewPlanService(uowFactory)
+
+	// 4. Controllers
+	// Note: We return the container with public fields for the server to register
+	return &Container{
+		NotebookController: controller.NewNotebookController(notebookService),
+		NoteController:     controller.NewNoteController(noteService),
+		UserController:     controller.NewUserController(userService),
+		AuthController:     controller.NewAuthController(authService),
+		OAuthController:    controller.NewOAuthController(oauthService),
+		AdminController:    controller.NewAdminController(adminService, authService),
+		PaymentController:  controller.NewPaymentController(paymentService),
+		ChatbotController:  controller.NewChatbotController(chatbotService),
+		LocationController: controller.NewLocationController(locationService),
+		PlanController:     controller.NewPlanController(planService),
+
+		ConsumerService: consumerService,
+	}
+}
+
+
+
+

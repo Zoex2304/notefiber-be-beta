@@ -1,0 +1,221 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **AI Chatbot Flow**\nSession Management & RAG-Enhanced Chat Processing
+header AI Chatbot Operations Sequence
+footer Page 1 of 1
+
+actor "User Client" as Client
+boundary "Server" as Server
+control "Chatbot Controller" as Controller
+control "Chatbot Service" as Service
+entity "ChatSession Repository" as SessionRepo
+entity "ChatMessage Repository" as MessageRepo
+control "Gemini API" as Gemini
+control "Ollama Service" as Ollama
+database "Database" as DB
+control "Plan Service" as PlanService
+
+autonumber "<b>[000]"
+
+== CREATE SESSION ==
+
+Client -[#CC3300]> Server : HTTP POST /api/chatbot/v1/create-session
+activate Client
+activate Server
+
+note right of Server : JWT Middleware: Extract User ID
+
+Server -[#CC3300]> Controller : Delegasi ke Service
+activate Controller
+
+Controller -[#CC3300]> Service : CreateSession
+activate Service
+
+Service -> Service : Transaction Begin
+Service -[#CC3300]> SessionRepo : Create: ChatSession + Initial Messages
+activate SessionRepo
+SessionRepo -[#CC3300]> DB : INSERT INTO chat_sessions (user_id, title, created_at)
+activate DB
+DB -[#006600]-> SessionRepo : Session ID
+deactivate DB
+SessionRepo -[#006600]-> Service : Session Created
+deactivate SessionRepo
+
+Service -[#CC3300]> MessageRepo : Create: ChatMessageRaw (System Prompts)
+activate MessageRepo
+MessageRepo -[#CC3300]> DB : INSERT INTO chat_message_raws (session_id, role, content, is_system)
+activate DB
+DB -[#006600]-> MessageRepo : Message ID
+deactivate DB
+MessageRepo -[#006600]-> Service : System Messages Created
+deactivate MessageRepo
+
+Service -> Service : Transaction Commit
+Service -[#006600]> Controller : Session ID
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Session ID
+deactivate Controller
+
+Server -[#006600]> Client : 201 Created\n{success: true, data: {session_id: "..."}}
+deactivate Server
+deactivate Client
+
+== SEND CHAT (RAG-Enhanced) ==
+
+Client -[#CC3300]> Server : HTTP POST /api/chatbot/v1/send-chat\n{session_id, message}
+activate Client
+activate Server
+
+note right of Server : JWT Middleware: Extract User ID
+
+Server -[#CC3300]> Controller : Parse Request
+activate Controller
+
+Controller -> Controller : Validate Session ID & Message
+Controller -[#CC3300]> Service : SendChat
+activate Service
+
+Service -[#CC6600]> PlanService : Guard: Check Pro Plan + AiChatEnabled
+activate PlanService
+PlanService -> PlanService : Validate User Subscription
+PlanService -[#006600]-> Service : Plan Validation Result
+deactivate PlanService
+
+alt Plan Not Valid
+    Service -> Service : Throw "Upgrade to Pro Plan"
+else Plan Valid
+    Service -[#CC6600]> PlanService : Guard: Check Daily Usage Limit
+    activate PlanService
+    PlanService -> PlanService : Check AiDailyUsage vs Limit
+    PlanService -[#006600]-> Service : Usage Status
+    deactivate PlanService
+    
+    alt Limit Exceeded
+        Service -> Service : Throw "Daily limit reached"
+    else Limit OK
+        Service -[#CC3300]> SessionRepo : Validate: Session Ownership
+        activate SessionRepo
+        SessionRepo -[#CC3300]> DB : SELECT user_id FROM chat_sessions WHERE id=?
+        activate DB
+        DB -[#006600]-> SessionRepo : Owner User ID
+        deactivate DB
+        SessionRepo -[#006600]-> Service : Ownership Valid
+        deactivate SessionRepo
+        
+        Service -> Service : Transaction Begin
+        
+        Service -[#CC6600]> Gemini : Generate Embedding for Query
+        activate Gemini
+        Gemini -[#006600]-> Service : Query Embedding Vector
+        deactivate Gemini
+        
+        Service -[#CC6600]> Ollama : Decide if RAG Needed
+        activate Ollama
+        Ollama -> Ollama : Analyze Query Type
+        Ollama -[#006600]-> Service : RAG Required (true/false)
+        deactivate Ollama
+        
+        alt RAG Needed = true
+            Service -> Service : Search Similar Note Embeddings
+            Service -> Service : Build: Context with References
+            Service -[#CC6600]> Ollama : Generate Response with Context
+            activate Ollama
+            Ollama -[#006600]-> Service : AI Response with Citations
+            deactivate Ollama
+        else RAG Not Needed
+            Service -[#CC6600]> Ollama : Generate Response
+            activate Ollama
+            Ollama -[#006600]-> Service : AI Response
+            deactivate Ollama
+        end
+        
+        Service -[#CC3300]> MessageRepo : Persist: Messages + Raw Messages
+        activate MessageRepo
+        MessageRepo -[#CC3300]> DB : INSERT INTO chat_messages (session_id, user_message, ai_response)
+        activate DB
+        DB -[#006600]-> MessageRepo : Message ID
+        deactivate DB
+        
+        MessageRepo -[#CC3300]> DB : INSERT INTO chat_message_raws (session_id, role, content)
+        activate DB
+        DB -[#006600]-> MessageRepo : Raw Message ID
+        deactivate DB
+        
+        MessageRepo -[#006600]-> Service : Messages Saved
+        deactivate MessageRepo
+        
+        Service -> Service : Increment: User.AiDailyUsage
+        Service -> Service : Transaction Commit
+        Service -> Service : Build Response DTO
+    end
+end
+
+Service -[#006600]> Controller : Sent + Reply
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Sent + Reply
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {\n  message_id: "...",\n  response: "...",\n  references: [...],\n  usage_incremented: true\n}}
+deactivate Server
+deactivate Client
+
+== GET CHAT HISTORY ==
+
+Client -[#CC3300]> Server : HTTP GET /api/chatbot/v1/chat-history?session_id=xxx
+activate Client
+activate Server
+
+note right of Server : JWT Middleware: Extract User ID
+
+Server -[#CC3300]> Controller : Parse Session ID
+activate Controller
+
+Controller -> Controller : Extract Session ID from Query
+Controller -[#CC3300]> Service : GetChatHistory
+activate Service
+
+Service -[#CC3300]> SessionRepo : Validate: Session Ownership
+activate SessionRepo
+SessionRepo -[#CC3300]> DB : SELECT user_id FROM chat_sessions WHERE id=?
+activate DB
+DB -[#006600]-> SessionRepo : Owner User ID
+deactivate DB
+SessionRepo -[#006600]-> Service : Ownership Valid
+deactivate SessionRepo
+
+Service -[#CC3300]> MessageRepo : FindAll ChatMessages
+activate MessageRepo
+MessageRepo -[#CC3300]> DB : SELECT * FROM chat_messages WHERE session_id=? ORDER BY created_at ASC
+activate DB
+DB -[#006600]-> MessageRepo : Chat Messages
+deactivate DB
+MessageRepo -[#006600]-> Service : Chat History
+deactivate MessageRepo
+
+Service -> Service : Transform to Response DTO
+Service -[#006600]> Controller : Chat List
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Chat List
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {\n  session_id: "...",\n  messages: [{\n    id: "...",\n    user_message: "...",\n    ai_response: "...",\n    created_at: "...",\n    has_references: true/false\n  }],\n  total: 15\n}}
+deactivate Server
+deactivate Client
+
+@enduml
+

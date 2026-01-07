@@ -1,0 +1,13 @@
+cmd/migrate/main.go
+pkg/database/gorm.go
+internal/model/user_model.go
+internal/model/notebook_model.go
+internal/model/note_model.go
+internal/model/note_embedding_model.go
+internal/model/chat_session_model.go
+internal/model/chat_message_model.go
+internal/model/subscription_model.go
+internal/model/feature_model.go
+internal/model/refund_model.go
+internal/model/ai_credit_transaction_model.go
+internal/model/system_log_model.go

@@ -1,0 +1,679 @@
+# Dokumentasi: Backend AI Service Integration Layer (Ollama LLM)
+
+**Tanggal Dokumentasi:** 27 Desember 2024  
+**Fokus Domain:** Backend (Ollama Local LLM Integration)  
+**Sumber Kebenaran:** Laporan Implementasi Fitur AI Chat dengan Ollama
+
+---
+
+## A. Pengantar Fitur Ollama Integration
+
+Fitur ini menyediakan integrasi dengan Ollama, sebuah platform untuk menjalankan Large Language Model (LLM) secara lokal tanpa ketergantungan pada API cloud berbayar. Ollama memberikan kemampuan unlimited AI processing dengan biaya nol setelah setup infrastructure.
+
+Secara operasional, sistem menggunakan Ollama untuk dua fungsi utama yaitu RAG Decision Making dan Chat Response Generation. RAG Decision Making menggunakan LLM untuk menentukan apakah pertanyaan user memerlukan pencarian dokumen atau dapat dijawab langsung. Chat Response Generation menggunakan LLM untuk menghasilkan respons berbasis conversation history dan optional RAG context.
+
+Arsitektur integrasi didesain modular dengan pemisahan yang jelas antara constant configuration, HTTP client wrapper, dan service layer yang mengorkestra alur chatbot. Model default yang digunakan adalah gemma:2b yang merupakan model ringan namun capable untuk task-task conversational.
+
+---
+
+## B. Alur Data End-to-End
+
+### B.1 Ollama Communication Flow
+
+Alur dimulai ketika ChatbotService menerima request chat dari user. Service kemudian memanggil fungsi Ollama wrapper untuk decision making dan response generation.
+
+```
+User Request (SendChat)
+    -> ChatbotService.SendChat()
+    -> Build DecisionHistory dari ChatMessageRaw
+    -> chatbot.DecideToUseRAGWithOllama()
+        -> Build OllamaChatRequest dengan RAG Decision Prompts
+        -> HTTP POST ke http://localhost:11434/api/chat
+        -> Parse OllamaChatResponse
+        -> Extract JSON {answer_directly: bool}
+        -> Return useRag = !answer_directly
+    
+    -> Jika useRag == true:
+        -> Gemini Embedding untuk user query
+        -> NoteEmbeddingRepository.SearchSimilar()
+        -> Append references ke prompt
+    
+    -> Build ChatHistory dengan full conversation
+    -> chatbot.GetOllamaResponse()
+        -> Convert ChatHistory ke OllamaMessage[]
+        -> HTTP POST ke http://localhost:11434/api/chat
+        -> Parse OllamaChatResponse
+        -> Return response.Message.Content
+    
+    -> Persist ChatMessage dan ChatMessageRaw
+    -> Increment user.AiDailyUsage
+    -> Return SendChatResponse
+```
+
+*Snippet 1: Alur lengkap komunikasi dengan Ollama server.*
+
+Sistem melakukan dua kali request ke Ollama per user chat: pertama untuk RAG decision, kedua untuk response generation. Kedua request menggunakan endpoint dan format yang sama tetapi dengan prompt yang berbeda.
+
+### B.2 Ollama API Communication
+
+```
+Backend Service
+    |
+    | HTTP POST
+    | Content-Type: application/json
+    | Timeout: 120 seconds
+    |
+    v
+Ollama Server (localhost:11434)
+    |
+    | POST /api/chat
+    |
+    v
+Local LLM (gemma:2b atau model lain)
+    |
+    | Non-streaming Response
+    |
+    v
+JSON Response
+    {
+        "model": "gemma:2b",
+        "created_at": "2024-12-27T...",
+        "message": {
+            "role": "assistant",
+            "content": "Response text..."
+        },
+        "done": true
+    }
+```
+
+*Snippet 2: Diagram komunikasi HTTP dengan Ollama server.*
+
+---
+
+## C. Arsitektur Backend - 10 Komponen
+
+### C.1 Ollama Constants
+
+Konstanta ini mendefinisikan konfigurasi default untuk koneksi Ollama. Nilai dapat di-override melalui environment variables.
+
+Lokasi file adalah internal/constant/chatbot_constant.go.
+
+```go
+const (
+	// Ollama Configuration Constants
+	OllamaDefaultBaseURL = "http://localhost:11434"
+	OllamaDefaultModel   = "gemma:2b"
+	OllamaChatEndpoint   = "/api/chat"
+
+	// Ollama Role Mapping (Ollama uses "assistant" instead of "model")
+	OllamaRoleAssistant = "assistant"
+	OllamaRoleUser      = "user"
+
+	// Ollama RAG Decision Prompts
+	OllamaRAGDecisionSystemPrompt = `You are a decision system. Given a conversation, decide if the user's question requires searching through documents/notes (use RAG) or can be answered directly.
+
+Rules:
+- Return {"answer_directly": true} if question is general, greetings, or doesn't need specific document info
+- Return {"answer_directly": false} if question asks about specific notes, documents, or past information
+
+Respond ONLY with JSON: {"answer_directly": true} or {"answer_directly": false}`
+
+	OllamaRAGDecisionAckPrompt   = `Understood. I will analyze conversations and respond only with JSON format.`
+	OllamaRAGDecisionFinalPrompt = `Based on the conversation above, should I answer directly or use RAG? Respond ONLY with JSON.`
+)
+```
+
+*Snippet 3: Konstanta konfigurasi Ollama.*
+
+OllamaDefaultBaseURL menunjuk ke local server pada port 11434 yang merupakan default port Ollama. OllamaDefaultModel menggunakan gemma:2b yang merupakan model dengan ukuran 2 billion parameters.
+
+OllamaRoleAssistant diperlukan karena Ollama menggunakan konvensi "assistant" untuk AI responses, berbeda dengan Gemini yang menggunakan "model". Mapping ini dilakukan saat konversi ChatHistory ke OllamaMessage.
+
+RAG Decision Prompts adalah system prompt yang mengajarkan LLM untuk membuat keputusan binary dalam format JSON. LLM akan mengembalikan {"answer_directly": true} atau {"answer_directly": false}.
+
+### C.2 Ollama Configuration Functions
+
+Fungsi ini membaca konfigurasi dari environment variables dengan fallback ke default values.
+
+Lokasi file adalah pkg/chatbot/ollama_chatbot.go.
+
+```go
+// GetOllamaBaseURL returns the Ollama server URL from env or default
+func GetOllamaBaseURL() string {
+	url := os.Getenv("OLLAMA_BASE_URL")
+	if url == "" {
+		return constant.OllamaDefaultBaseURL
+	}
+	return url
+}
+
+// GetOllamaModel returns the model from env or default
+func GetOllamaModel() string {
+	model := os.Getenv("OLLAMA_MODEL")
+	if model == "" {
+		return constant.OllamaDefaultModel
+	}
+	return model
+}
+```
+
+*Snippet 4: Fungsi konfigurasi dengan environment variable override.*
+
+Environment variables OLLAMA_BASE_URL dan OLLAMA_MODEL memungkinkan konfigurasi deployment tanpa mengubah kode. Dalam production, dapat menunjuk ke remote Ollama server atau menggunakan model yang lebih powerful.
+
+### C.3 Request/Response Types
+
+Struktur data ini mendefinisikan format komunikasi dengan Ollama API sesuai dengan dokumentasi resmi Ollama.
+
+Lokasi file adalah pkg/chatbot/ollama_chatbot.go.
+
+```go
+// OllamaChatRequest is the request payload for Ollama chat API
+type OllamaChatRequest struct {
+	Model    string          `json:"model"`
+	Messages []OllamaMessage `json:"messages"`
+	Stream   bool            `json:"stream"`
+	Options  *OllamaOptions  `json:"options,omitempty"`
+}
+
+// OllamaMessage represents a single message in Ollama format
+type OllamaMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// OllamaOptions for model configuration
+type OllamaOptions struct {
+	Temperature float64 `json:"temperature,omitempty"`
+	NumPredict  int     `json:"num_predict,omitempty"`
+}
+
+// OllamaChatResponse is the response from Ollama chat API
+type OllamaChatResponse struct {
+	Model     string        `json:"model"`
+	CreatedAt time.Time     `json:"created_at"`
+	Message   OllamaMessage `json:"message"`
+	Done      bool          `json:"done"`
+}
+```
+
+*Snippet 5: Struktur data untuk Ollama API communication.*
+
+OllamaChatRequest berisi model name, array messages untuk conversation history, dan flag stream yang di-set false untuk non-streaming response.
+
+OllamaMessage memiliki format sederhana dengan role (user/assistant/system) dan content sebagai text. Format ini mirip dengan OpenAI Chat Completions API.
+
+OllamaOptions memungkinkan konfigurasi model seperti temperature untuk kreativitas dan num_predict untuk max tokens. Saat ini tidak digunakan tetapi tersedia untuk future enhancement.
+
+### C.4 GetOllamaResponse Function
+
+Fungsi ini adalah core function untuk menghasilkan response dari Ollama. Fungsi menerima chat history dan mengembalikan text response.
+
+Lokasi file adalah pkg/chatbot/ollama_chatbot.go.
+
+```go
+// GetOllamaResponse generates a response using local Ollama server
+// This replaces GetGeminiResponse for unlimited local processing
+// No API key required!
+func GetOllamaResponse(
+	ctx context.Context,
+	chatHistories []*ChatHistory,
+) (string, error) {
+	// Convert ChatHistory to Ollama format
+	messages := make([]OllamaMessage, 0, len(chatHistories))
+	for _, history := range chatHistories {
+		// Map "model" role to "assistant" for Ollama compatibility
+		role := history.Role
+		if role == constant.ChatMessageRoleModel {
+			role = constant.OllamaRoleAssistant
+		}
+		messages = append(messages, OllamaMessage{
+			Role:    role,
+			Content: history.Chat,
+		})
+	}
+
+	// Build request
+	payload := OllamaChatRequest{
+		Model:    GetOllamaModel(),
+		Messages: messages,
+		Stream:   false, // Non-streaming for simplicity
+	}
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return "", fmt.Errorf("marshal request: %w", err)
+	}
+
+	// Create HTTP request
+	url := GetOllamaBaseURL() + constant.OllamaChatEndpoint
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(payloadJSON))
+	if err != nil {
+		return "", fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	// Send request with timeout (Ollama can be slow on first request due to model loading)
+	client := &http.Client{
+		Timeout: 120 * time.Second,
+	}
+
+	res, err := client.Do(req)
+	if err != nil {
+		return "", fmt.Errorf("ollama request failed: %w", err)
+	}
+	defer res.Body.Close()
+
+	// Read response
+	resBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		return "", fmt.Errorf("read response: %w", err)
+	}
+
+	// Check status code
+	if res.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("ollama error: status %d, body: %s", res.StatusCode, string(resBody))
+	}
+
+	// Parse response
+	var ollamaRes OllamaChatResponse
+	if err := json.Unmarshal(resBody, &ollamaRes); err != nil {
+		return "", fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	return ollamaRes.Message.Content, nil
+}
+```
+
+*Snippet 6: Implementasi GetOllamaResponse untuk chat generation.*
+
+Langkah pertama adalah konversi ChatHistory ke format OllamaMessage. Role "model" yang digunakan internal dikonversi ke "assistant" yang dipahami Ollama.
+
+Timeout 120 detik diperlukan karena Ollama dapat lambat pada request pertama karena model loading ke memory. Request selanjutnya biasanya lebih cepat karena model sudah loaded.
+
+Response parsing mengekstrak field Message.Content yang berisi text response dari LLM.
+
+### C.5 DecideToUseRAGWithOllama Function
+
+Fungsi ini menggunakan Ollama untuk membuat keputusan apakah pertanyaan user memerlukan RAG (retrieval-augmented generation) atau dapat dijawab langsung.
+
+Lokasi file adalah pkg/chatbot/ollama_chatbot.go.
+
+```go
+// DecideToUseRAGWithOllama decides whether to use RAG based on conversation
+// This replaces DecideToUseRAG for unlimited local processing
+func DecideToUseRAGWithOllama(
+	ctx context.Context,
+	chatHistories []*ChatHistory,
+) (bool, error) {
+	// Build conversation with decision instruction
+	messages := make([]OllamaMessage, 0)
+
+	// System instruction
+	messages = append(messages, OllamaMessage{
+		Role:    constant.OllamaRoleUser,
+		Content: constant.OllamaRAGDecisionSystemPrompt,
+	})
+
+	messages = append(messages, OllamaMessage{
+		Role:    constant.OllamaRoleAssistant,
+		Content: constant.OllamaRAGDecisionAckPrompt,
+	})
+
+	// Add conversation history
+	for _, history := range chatHistories {
+		role := history.Role
+		if role == constant.ChatMessageRoleModel {
+			role = constant.OllamaRoleAssistant
+		}
+		messages = append(messages, OllamaMessage{
+			Role:    role,
+			Content: history.Chat,
+		})
+	}
+
+	// Final instruction to enforce JSON
+	messages = append(messages, OllamaMessage{
+		Role:    constant.OllamaRoleUser,
+		Content: constant.OllamaRAGDecisionFinalPrompt,
+	})
+
+	// Build request
+	payload := OllamaChatRequest{
+		Model:    GetOllamaModel(),
+		Messages: messages,
+		Stream:   false,
+	}
+
+	payloadJSON, err := json.Marshal(payload)
+	if err != nil {
+		return false, fmt.Errorf("marshal request: %w", err)
+	}
+
+	// Send request
+	url := GetOllamaBaseURL() + constant.OllamaChatEndpoint
+	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewBuffer(payloadJSON))
+	if err != nil {
+		return false, fmt.Errorf("create request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 60 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		return false, fmt.Errorf("ollama request failed: %w", err)
+	}
+	defer res.Body.Close()
+
+	resBody, err := io.ReadAll(res.Body)
+	if err != nil {
+		return false, fmt.Errorf("read response: %w", err)
+	}
+
+	if res.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("ollama error: status %d, body: %s", res.StatusCode, string(resBody))
+	}
+
+	// Parse response
+	var ollamaRes OllamaChatResponse
+	if err := json.Unmarshal(resBody, &ollamaRes); err != nil {
+		return false, fmt.Errorf("unmarshal response: %w", err)
+	}
+
+	// Clean and parse JSON from response
+	responseText := ollamaRes.Message.Content
+	responseBytes := []byte(responseText)
+
+	// Remove markdown code blocks if present
+	responseBytes = bytes.TrimSpace(responseBytes)
+	responseBytes = bytes.TrimPrefix(responseBytes, []byte("```json"))
+	responseBytes = bytes.TrimPrefix(responseBytes, []byte("```"))
+	responseBytes = bytes.TrimSuffix(responseBytes, []byte("```"))
+	responseBytes = bytes.TrimSpace(responseBytes)
+
+	// Parse JSON
+	var decision struct {
+		AnswerDirectly bool `json:"answer_directly"`
+	}
+
+	if err := json.Unmarshal(responseBytes, &decision); err != nil {
+		return false, fmt.Errorf("parse decision JSON: %w, raw: %s", err, string(responseBytes))
+	}
+
+	// Return inverse: if answer_directly=true, then use_rag=false
+	return !decision.AnswerDirectly, nil
+}
+```
+
+*Snippet 7: Implementasi DecideToUseRAGWithOllama untuk RAG decision.*
+
+Prompt engineering menggunakan pattern few-shot dengan system instruction diikuti acknowledgement. Conversation history ditambahkan untuk konteks, kemudian final instruction memaksa LLM mengembalikan JSON.
+
+Cleaning logic menangani kasus dimana LLM membungkus JSON dalam markdown code blocks. Ini adalah behavior umum pada beberapa model.
+
+Return value adalah inverse dari answer_directly karena fungsi mengembalikan "apakah perlu RAG" bukan "apakah bisa jawab langsung".
+
+### C.6 ChatHistory Type
+
+Struktur ini adalah internal representation untuk conversation history yang digunakan di seluruh chatbot package.
+
+Lokasi file adalah pkg/chatbot/ollama_chatbot.go (atau shared types).
+
+```go
+// ChatHistory represents a single turn in conversation
+type ChatHistory struct {
+	Role string
+	Chat string
+}
+```
+
+*Snippet 8: Struktur ChatHistory untuk conversation representation.*
+
+Struktur ini digunakan sebagai parameter untuk GetOllamaResponse dan DecideToUseRAGWithOllama. Konversi ke format OllamaMessage dilakukan di dalam fungsi.
+
+### C.7 Service Integration - RAG Decision
+
+ChatbotService menggunakan DecideToUseRAGWithOllama untuk menentukan apakah perlu melakukan semantic search sebelum menjawab.
+
+Lokasi file adalah internal/service/chatbot_service.go.
+
+```go
+decideUseRAGChatHistories := make([]*chatbot.ChatHistory, 0)
+for i, rawChat := range existingRawChats {
+	if i == 0 {
+		decideUseRAGChatHistories = append(decideUseRAGChatHistories, &chatbot.ChatHistory{
+			Chat: constant.DecideUseRAGMessageRawInitialUserPromptV1,
+			Role: constant.ChatMessageRoleUser,
+		})
+		continue
+	} else if i == 1 {
+		decideUseRAGChatHistories = append(decideUseRAGChatHistories, &chatbot.ChatHistory{
+			Chat: constant.DecideUseRAGMessageRawInitialModelPromptV1,
+			Role: constant.ChatMessageRoleModel,
+		})
+		continue
+	}
+
+	decideUseRAGChatHistories = append(decideUseRAGChatHistories, &chatbot.ChatHistory{
+		Chat: rawChat.Chat,
+		Role: rawChat.Role,
+	})
+}
+
+useRag, err := chatbot.DecideToUseRAGWithOllama(
+	ctx,
+	decideUseRAGChatHistories,
+)
+if err != nil {
+	return nil, err
+}
+```
+
+*Snippet 9: Penggunaan DecideToUseRAGWithOllama di service layer.*
+
+Service membangun history dengan mengganti dua pesan pertama dengan system prompts khusus untuk RAG decision. Pesan asli disimpan sebagaimana adanya untuk konteks.
+
+Hasil useRag menentukan apakah step berikutnya melakukan semantic search atau langsung generate response.
+
+### C.8 Service Integration - RAG Context Building
+
+Jika useRag == true, service melakukan semantic search dan menambahkan references ke prompt.
+
+Lokasi file adalah internal/service/chatbot_service.go.
+
+```go
+strBuilder := strings.Builder{}
+if useRag {
+	// Semantic search untuk reference
+	noteEmbeddings, err := uow.NoteEmbeddingRepository().SearchSimilar(
+		ctx,
+		embeddingRes.Embedding.Values,
+		5,      // Top 5 results
+		userId, // Filter by user ownership
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, noteEmbedding := range noteEmbeddings {
+		strBuilder.WriteString(fmt.Sprintf("Reference %d\n", i+1))
+		strBuilder.WriteString(noteEmbedding.Document)
+		strBuilder.WriteString("\n\n")
+	}
+}
+
+strBuilder.WriteString("User next question: ")
+strBuilder.WriteString(request.Chat)
+strBuilder.WriteString("\n\n")
+strBuilder.WriteString("Your answer ?")
+```
+
+*Snippet 10: Building context dengan RAG references.*
+
+References di-format dengan nomor untuk kemudahan tracking di response. Document content ditambahkan lengkap untuk memberikan context maksimal ke LLM.
+
+User question ditambahkan setelah references dengan prefix "User next question:" untuk membedakan dari reference content.
+
+### C.9 Service Integration - Response Generation
+
+Setelah context dibangun, service memanggil GetOllamaResponse untuk generate final response.
+
+Lokasi file adalah internal/service/chatbot_service.go.
+
+```go
+chatMessageRaw := entity.ChatMessageRaw{
+	Id:            uuid.New(),
+	Chat:          strBuilder.String(), // Full prompt dengan references
+	Role:          constant.ChatMessageRoleUser,
+	ChatSessionId: request.ChatSessionId,
+	CreatedAt:     now,
+}
+
+existingRawChats = append(existingRawChats, &chatMessageRaw)
+
+geminiReq := make([]*chatbot.ChatHistory, 0)
+for _, existingRawChat := range existingRawChats {
+	geminiReq = append(geminiReq, &chatbot.ChatHistory{
+		Chat: existingRawChat.Chat,
+		Role: existingRawChat.Role,
+	})
+}
+
+reply, err := chatbot.GetOllamaResponse(
+	ctx,
+	geminiReq,
+)
+if err != nil {
+	return nil, err
+}
+```
+
+*Snippet 11: Pemanggilan GetOllamaResponse untuk generate response.*
+
+Full conversation history termasuk prompt baru dengan references dikirim ke Ollama. Ini memberikan LLM context lengkap untuk menghasilkan response yang coherent.
+
+Variable naming "geminiReq" adalah legacy dari migrasi Gemini ke Ollama tetapi strukturnya compatible.
+
+### C.10 Environment Variables
+
+Konfigurasi Ollama melalui environment variables untuk fleksibilitas deployment.
+
+```
+# Ollama Configuration
+OLLAMA_BASE_URL=http://localhost:11434    # Default: http://localhost:11434
+OLLAMA_MODEL=gemma:2b                      # Default: gemma:2b
+```
+
+*Snippet 12: Environment variables untuk konfigurasi Ollama.*
+
+OLLAMA_BASE_URL dapat di-set ke remote server jika Ollama dijalankan di machine terpisah. OLLAMA_MODEL dapat diubah ke model lain seperti llama2, mistral, atau model custom.
+
+---
+
+## D. Ringkasan Arsitektur
+
+### D.1 Tabel Komponen
+
+| No | Layer | File | Tanggung Jawab |
+|---|---|---|---|
+| 1 | Constants | constant/chatbot_constant.go | Default URL, Model, Prompts |
+| 2 | Config | pkg/chatbot/ollama_chatbot.go | GetOllamaBaseURL, GetOllamaModel |
+| 3 | Types | pkg/chatbot/ollama_chatbot.go | Request/Response structs |
+| 4 | Core Function | pkg/chatbot/ollama_chatbot.go | GetOllamaResponse |
+| 5 | Core Function | pkg/chatbot/ollama_chatbot.go | DecideToUseRAGWithOllama |
+| 6 | Shared Type | pkg/chatbot/types.go | ChatHistory |
+| 7 | Service | service/chatbot_service.go | RAG Decision call |
+| 8 | Service | service/chatbot_service.go | Context building |
+| 9 | Service | service/chatbot_service.go | Response generation |
+| 10 | Config | .env | Environment variables |
+
+*Tabel 1: Ringkasan 10 komponen Ollama integration.*
+
+### D.2 Ollama vs Cloud LLM Comparison
+
+| Aspect | Ollama (Local) | Cloud LLM (Gemini/OpenAI) |
+|--------|----------------|---------------------------|
+| Cost | Free (after hardware) | Pay per token |
+| Latency | ~2-5s (depends on hardware) | ~1-3s |
+| Privacy | Data never leaves server | Data sent to cloud |
+| Availability | Depends on local infra | High (SLA backed) |
+| Model Options | Limited to downloadable | Latest models |
+| Rate Limits | None (self-hosted) | API rate limits |
+| Setup | Requires Ollama installation | API key only |
+
+*Tabel 2: Perbandingan Ollama dengan Cloud LLM.*
+
+### D.3 System Requirements
+
+```
+Ollama Server Requirements:
+- CPU: Modern x64 processor
+- RAM: 8GB+ (model dependent)
+- Storage: 5GB+ per model
+- OS: Linux, macOS, Windows (WSL)
+
+Model Size Reference:
+- gemma:2b  - ~2GB disk, ~4GB RAM
+- llama2:7b - ~4GB disk, ~8GB RAM
+- mistral   - ~4GB disk, ~8GB RAM
+```
+
+*Snippet 13: System requirements untuk Ollama deployment.*
+
+---
+
+## E. Error Handling
+
+### E.1 Connection Errors
+
+```go
+if err != nil {
+	return "", fmt.Errorf("ollama request failed: %w", err)
+}
+```
+
+Error ini terjadi ketika Ollama server tidak dapat dihubungi. Penyebab umum: server tidak running, port salah, atau firewall.
+
+### E.2 Status Code Errors
+
+```go
+if res.StatusCode != http.StatusOK {
+	return "", fmt.Errorf("ollama error: status %d, body: %s", res.StatusCode, string(resBody))
+}
+```
+
+Error ini terjadi ketika Ollama mengembalikan non-200 response. Penyebab umum: model tidak ditemukan, request malformed.
+
+### E.3 JSON Parse Errors
+
+```go
+if err := json.Unmarshal(responseBytes, &decision); err != nil {
+	return false, fmt.Errorf("parse decision JSON: %w, raw: %s", err, string(responseBytes))
+}
+```
+
+Error ini terjadi ketika LLM tidak mengembalikan valid JSON. Raw response di-log untuk debugging.
+
+---
+
+## F. Best Practices
+
+### F.1 Timeout Configuration
+
+Timeout 120 detik untuk response generation dan 60 detik untuk decision making mempertimbangkan model loading time dan inference time.
+
+### F.2 Role Mapping
+
+Selalu map internal role "model" ke Ollama role "assistant" untuk kompatibilitas. Ollama tidak mengenal role "model".
+
+### F.3 JSON Cleaning
+
+LLM sering membungkus JSON dalam markdown code blocks. Selalu clean response sebelum parsing.
+
+### F.4 Context Window
+
+Model gemma:2b memiliki context window terbatas. Untuk conversation panjang, pertimbangkan truncation strategy.
+
+---
+
+*Dokumen ini mengacu pada implementasi aktual dalam codebase tanpa modifikasi.*

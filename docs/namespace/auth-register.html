@@ -1,0 +1,964 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>auth-register.md</title>
+<meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Markdown PDF CSS
+ */
+
+ body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+
+<script src="https://unpkg.com/mermaid/dist/mermaid.min.js"></script>
+</head>
+<body>
+  <script>
+    mermaid.initialize({
+      startOnLoad: true,
+      theme: document.body.classList.contains('vscode-dark') || document.body.classList.contains('vscode-high-contrast')
+          ? 'dark'
+          : 'default'
+    });
+  </script>
+<h1 id="dokumentasi-fitur-authentikasi---sign-up-user-credential">Dokumentasi Fitur: Authentikasi - Sign Up User Credential</h1>
+<blockquote>
+<p><strong>Fokus Domain:</strong> BACKEND<br>
+<strong>Konteks:</strong> Trace Upstream ke Downstream secara Semantik</p>
+</blockquote>
+<hr>
+<h2 id="alur-data-semantik-scope-backend">Alur Data Semantik (Scope: BACKEND)</h2>
+<pre class="hljs"><code><div>@startuml
+title Auth Register Flow (Upstream to Downstream)
+
+actor Client
+
+Client -&gt; Server: HTTP POST /api/auth/register
+Server -&gt; Middleware: Routing &amp; Middleware
+Middleware -&gt; Controller: Parsing Request &amp; Delegation
+Controller -&gt; Service: Orchestrate Business Logic
+
+Service -&gt; UnitOfWork: Begin Transaction
+UnitOfWork -&gt; Repository: Data Access
+Repository -&gt; Mapper: Entity &lt;-&gt; Model Transformation
+Mapper -&gt; Model: Map to ORM Model
+Model -&gt; Database: Persist Data
+Database --&gt; Model: Persisted
+Model --&gt; Mapper
+Mapper --&gt; Repository
+Repository --&gt; UnitOfWork
+
+UnitOfWork -&gt; UnitOfWork: Commit Transaction
+UnitOfWork --&gt; Service
+
+Service -&gt; Mailer: Send OTP (Async)
+note right of Mailer
+Asynchronous process
+Does not block response
+end note
+
+Service --&gt; Controller: Registration Result
+Controller --&gt; Server: Build JSON Response
+Server --&gt; Client: HTTP Response JSON
+
+@enduml
+
+</div></code></pre>
+<hr>
+<h2 id="a-laporan-implementasi-fitur-sign-up-user-credential">A. Laporan Implementasi Fitur Sign Up User Credential</h2>
+<h3 id="deskripsi-fungsional">Deskripsi Fungsional</h3>
+<p>Fitur ini menyediakan mekanisme pendaftaran akun pengguna baru dengan metode tradisional (email &amp; password). Secara operasional, sistem menangani validasi keunikan identitas, pengamanan kredensial melalui algoritma hashing bcrypt, dan inisiasi siklus hidup akun dalam status &quot;Pending&quot;. Untuk memitigasi risiko akun fiktif, sistem menerapkan mekanisme verifikasi dua langkah berbasis One-Time Password (OTP) yang dikirimkan ke alamat email terdaftar. Pengguna baru tidak dapat mengakses fitur utama aplikasi hingga proses verifikasi email berhasil diselesaikan.</p>
+<h3 id="visualisasi">Visualisasi</h3>
+<pre class="hljs"><code><div>{
+    <span class="hljs-attr">"success"</span>: <span class="hljs-literal">true</span>,
+    <span class="hljs-attr">"code"</span>: <span class="hljs-number">200</span>,
+    <span class="hljs-attr">"message"</span>: <span class="hljs-string">"User registered successfully. Check console for OTP."</span>,
+    <span class="hljs-attr">"data"</span>: {
+        <span class="hljs-attr">"id"</span>: <span class="hljs-string">"550e8400-e29b-41d4-a716-446655440000"</span>,
+        <span class="hljs-attr">"email"</span>: <span class="hljs-string">"user@example.com"</span>
+    }
+}
+</div></code></pre>
+<p><em>Caption: Gambar 1: Struktur JSON Response sukses yang menandakan inisiasi data pengguna baru dan instruksi verifikasi.</em></p>
+<hr>
+<h2 id="b-bedah-arsitektur--komponen">B. Bedah Arsitektur &amp; Komponen</h2>
+<p>Berikut adalah rincian 13 komponen yang menyusun fitur ini di sisi BACKEND, diurutkan dari upstream (penerima request) ke downstream (persistensi data dan notifikasi).</p>
+<hr>
+<h3 id="internalserverservergofilednotetakernotefiber-beinternalserverservergo">[internal/server/server.go](file:///d:/notetaker/notefiber-BE/internal/server/server.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>HTTP Server &amp; Route Registration</code></p>
+<p><strong>Narasi Operasional:</strong>
+Komponen ini menginisialisasi instance server HTTP berbasis Fiber dan mendaftarkan seluruh middleware global (CORS, OpenTelemetry Tracing, Error Handler). Pada tahap bootstrap, ia menerima objek [Container](file:///d:/notetaker/notefiber-BE/internal/bootstrap/container.go#16-32) yang berisi semua controller yang sudah terinisialisasi, kemudian memanggil fungsi [registerRoutes](file:///d:/notetaker/notefiber-BE/internal/server/server.go#64-80) untuk menghubungkan setiap controller dengan path HTTP yang sesuai. Untuk alur Sign Up, [AuthController](file:///d:/notetaker/notefiber-BE/internal/controller/auth_controller.go#11-20) didaftarkan pada grup <code>/api</code>, sehingga endpoint <code>/api/auth/register</code> menjadi aktif dan siap menerima request dari klien.</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">registerRoutes</span><span class="hljs-params">(app *fiber.App, c *bootstrap.Container)</span></span> {
+	api := app.Group(<span class="hljs-string">"/api"</span>)
+
+	c.AuthController.RegisterRoutes(api)
+	c.UserController.RegisterRoutes(api)
+	c.OAuthController.RegisterRoutes(api)
+	<span class="hljs-comment">// ... other controllers</span>
+}
+</div></code></pre>
+<p><em>Caption: Snippet 1: Registrasi route controller ke grup API utama.</em></p>
+<hr>
+<h3 id="internalbootstrapcontainergofilednotetakernotefiber-beinternalbootstrapcontainergo">[internal/bootstrap/container.go](file:///d:/notetaker/notefiber-BE/internal/bootstrap/container.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Dependency Injection Container</code></p>
+<p><strong>Narasi Operasional:</strong>
+File ini mengorkestrasi konstruksi dan injeksi dependensi seluruh komponen aplikasi. Ia menginisialisasi infrastruktur inti ([RepositoryFactory](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/repository_factory.go#5-8), [EmailService](file:///d:/notetaker/notefiber-BE/internal/pkg/mailer/email_service.go#11-15)) dan menyusun hierarki dependensi: Service dibangun dengan Repository Factory, kemudian Controller dibangun dengan Service. Untuk alur autentikasi, [AuthService](file:///d:/notetaker/notefiber-BE/internal/service/auth_service.go#26-35) diinisialisasi dengan <code>uowFactory</code> (untuk akses data) dan [emailService](file:///d:/notetaker/notefiber-BE/internal/pkg/mailer/email_service.go#16-21) (untuk pengiriman OTP), lalu diinjeksikan ke [AuthController](file:///d:/notetaker/notefiber-BE/internal/controller/auth_controller.go#11-20). Pendekatan ini memastikan decoupling antar layer dan memudahkan pengujian unit.</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewContainer</span><span class="hljs-params">(db *gorm.DB, cfg *config.Config)</span> *<span class="hljs-title">Container</span></span> {
+	<span class="hljs-comment">// 1. Core Facades</span>
+	uowFactory := unitofwork.NewRepositoryFactory(db)
+	emailService := mailer.NewEmailService(
+		cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.Email, cfg.SMTP.Password, cfg.SMTP.SenderName,
+	)
+
+	<span class="hljs-comment">// 3. Services</span>
+	authService := service.NewAuthService(uowFactory, emailService)
+
+	<span class="hljs-comment">// 4. Controllers</span>
+	<span class="hljs-keyword">return</span> &amp;Container{
+		AuthController: controller.NewAuthController(authService),
+		<span class="hljs-comment">// ...</span>
+	}
+}
+</div></code></pre>
+<p><em>Caption: Snippet 2: Konstruksi hierarki dependensi untuk fitur autentikasi.</em></p>
+<hr>
+<h3 id="internaldtoauthpaymentdtogofilednotetakernotefiber-beinternaldtoauthpaymentdtogo">[internal/dto/auth_payment_dto.go](file:///d:/notetaker/notefiber-BE/internal/dto/auth_payment_dto.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Data Transfer Object (DTO)</code></p>
+<p><strong>Narasi Operasional:</strong>
+File ini mendefinisikan kontrak data yang ketat untuk pertukaran informasi antara klien dan server. Struktur [RegisterRequest](file:///d:/notetaker/notefiber-BE/internal/dto/auth_payment_dto.go#10-15) menentukan field wajib (<code>full_name</code>, [email](file:///d:/notetaker/notefiber-BE/internal/pkg/mailer/email_service.go#16-21), <code>password</code>) beserta aturan validasi (menggunakan tag <code>validate</code>). Kontrak ini digunakan oleh Controller untuk mem-parsing body request dan memvalidasi format input sebelum data diteruskan ke layer Service. Struktur [RegisterResponse](file:///d:/notetaker/notefiber-BE/internal/dto/auth_payment_dto.go#21-25) mendefinisikan payload respons yang dikembalikan ke klien setelah proses registrasi berhasil.</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">type</span> RegisterRequest <span class="hljs-keyword">struct</span> {
+	FullName <span class="hljs-keyword">string</span> <span class="hljs-string">`json:"full_name" validate:"required,min=3"`</span>
+	Email    <span class="hljs-keyword">string</span> <span class="hljs-string">`json:"email" validate:"required,email"`</span>
+	Password <span class="hljs-keyword">string</span> <span class="hljs-string">`json:"password" validate:"required,min=8"`</span>
+}
+
+<span class="hljs-keyword">type</span> RegisterResponse <span class="hljs-keyword">struct</span> {
+	Id    uuid.UUID <span class="hljs-string">`json:"id"`</span>
+	Email <span class="hljs-keyword">string</span>    <span class="hljs-string">`json:"email"`</span>
+}
+</div></code></pre>
+<p><em>Caption: Snippet 3: Definisi struktur data request dan response untuk registrasi.</em></p>
+<hr>
+<h3 id="internalcontrollerauthcontrollergofilednotetakernotefiber-beinternalcontrollerauthcontrollergo">[internal/controller/auth_controller.go](file:///d:/notetaker/notefiber-BE/internal/controller/auth_controller.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Interface / Controller Layer</code></p>
+<p><strong>Narasi Operasional:</strong>
+Komponen ini menangani siklus Request-Response HTTP untuk seluruh endpoint autentikasi. Fungsi [RegisterRoutes](file:///d:/notetaker/notefiber-BE/internal/controller/auth_controller.go#12-13) mendaftarkan path <code>/auth/register</code> dengan handler [Register](file:///d:/notetaker/notefiber-BE/internal/service/auth_service.go#56-130). Saat request masuk, handler mem-parsing body JSON ke struktur [RegisterRequest](file:///d:/notetaker/notefiber-BE/internal/dto/auth_payment_dto.go#10-15), kemudian mendelegasikan eksekusi logika bisnis ke [AuthService](file:///d:/notetaker/notefiber-BE/internal/service/auth_service.go#26-35). Setelah proses selesai, ia membungkus hasil eksekusi ke dalam format respons JSON standar dengan field <code>success</code>, <code>code</code>, <code>message</code>, dan <code>data</code> yang konsisten.</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *authController)</span> <span class="hljs-title">RegisterRoutes</span><span class="hljs-params">(r fiber.Router)</span></span> {
+	h := r.Group(<span class="hljs-string">"/auth"</span>)
+	h.Post(<span class="hljs-string">"/register"</span>, c.Register)
+	h.Post(<span class="hljs-string">"/verify-email"</span>, c.VerifyEmail)
+	<span class="hljs-comment">// ...</span>
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(c *authController)</span> <span class="hljs-title">Register</span><span class="hljs-params">(ctx *fiber.Ctx)</span> <span class="hljs-title">error</span></span> {
+	<span class="hljs-keyword">var</span> req dto.RegisterRequest
+	<span class="hljs-keyword">if</span> err := ctx.BodyParser(&amp;req); err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> err
+	}
+
+	res, err := c.service.Register(ctx.Context(), &amp;req)
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			<span class="hljs-string">"success"</span>: <span class="hljs-literal">false</span>, <span class="hljs-string">"code"</span>: <span class="hljs-number">400</span>, <span class="hljs-string">"message"</span>: err.Error(),
+		})
+	}
+	<span class="hljs-keyword">return</span> ctx.JSON(fiber.Map{
+		<span class="hljs-string">"success"</span>: <span class="hljs-literal">true</span>, <span class="hljs-string">"code"</span>: <span class="hljs-number">200</span>,
+		<span class="hljs-string">"message"</span>: <span class="hljs-string">"User registered successfully. Check console for OTP."</span>,
+		<span class="hljs-string">"data"</span>: res,
+	})
+}
+</div></code></pre>
+<p><em>Caption: Snippet 4: Implementasi handler registrasi yang mengelola parsing, delegasi, dan formatting output.</em></p>
+<hr>
+<h3 id="internalserviceauthservicegofilednotetakernotefiber-beinternalserviceauthservicego">[internal/service/auth_service.go](file:///d:/notetaker/notefiber-BE/internal/service/auth_service.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Business Logic / Service Layer</code></p>
+<p><strong>Narasi Operasional:</strong>
+Komponen ini mengenkapsulasi inti logika pendaftaran. Ia mengoordinasikan serangkaian operasi kritis secara berurutan: (1) memvalidasi ketersediaan email melalui Unit of Work untuk mencegah duplikasi, (2) mengamankan password menggunakan algoritma bcrypt, (3) menyusun entitas User baru dengan status &quot;Pending&quot;, (4) memulai transaksi database untuk menjamin atomisitas, (5) mempersistenkan data User dan Token Verifikasi secara bersamaan, (6) meng-commit transaksi, dan (7) memicu pengiriman email OTP secara asynchronous (goroutine) agar tidak memblokir respons ke klien. Ia bergantung pada [RepositoryFactory](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/repository_factory.go#5-8) untuk akses data dan [IEmailService](file:///d:/notetaker/notefiber-BE/internal/pkg/mailer/email_service.go#11-15) untuk notifikasi.</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(s *authService)</span> <span class="hljs-title">Register</span><span class="hljs-params">(ctx context.Context, req *dto.RegisterRequest)</span> <span class="hljs-params">(*dto.RegisterResponse, error)</span></span> {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+	
+	<span class="hljs-comment">// 1. Check for existing user</span>
+	existing, _ := uow.UserRepository().FindOne(ctx, specification.ByEmail{Email: req.Email})
+	<span class="hljs-keyword">if</span> existing != <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, errors.New(<span class="hljs-string">"email already registered"</span>)
+	}
+
+	<span class="hljs-comment">// 2. Hash password</span>
+	hash, err := bcrypt.GenerateFromPassword([]<span class="hljs-keyword">byte</span>(req.Password), bcrypt.DefaultCost)
+	<span class="hljs-keyword">if</span> err != <span class="hljs-literal">nil</span> { <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, err }
+
+	<span class="hljs-comment">// 3. Create User Entity</span>
+	user := &amp;entity.User{
+		Id: uuid.New(), Email: req.Email, FullName: req.FullName,
+		PasswordHash: &amp;hashStr, Role: entity.UserRoleUser,
+		Status: entity.UserStatusPending, EmailVerified: <span class="hljs-literal">false</span>,
+	}
+
+	<span class="hljs-comment">// 4. Begin Transaction</span>
+	<span class="hljs-keyword">if</span> err := uow.Begin(ctx); err != <span class="hljs-literal">nil</span> { <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, err }
+	<span class="hljs-keyword">defer</span> uow.Rollback()
+
+	<span class="hljs-comment">// 5. Persist User &amp; OTP Token</span>
+	<span class="hljs-keyword">if</span> err := uow.UserRepository().Create(ctx, user); err != <span class="hljs-literal">nil</span> { <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, err }
+	<span class="hljs-keyword">if</span> err := uow.UserRepository().CreateEmailVerificationToken(ctx, verificationToken); err != <span class="hljs-literal">nil</span> { <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, err }
+
+	<span class="hljs-comment">// 6. Commit Transaction</span>
+	<span class="hljs-keyword">if</span> err := uow.Commit(); err != <span class="hljs-literal">nil</span> { <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, err }
+
+	<span class="hljs-comment">// 7. Async Email Delivery</span>
+	<span class="hljs-keyword">go</span> <span class="hljs-function"><span class="hljs-keyword">func</span><span class="hljs-params">()</span></span> { s.emailService.SendOTP(user.Email, otpCode) }()
+
+	<span class="hljs-keyword">return</span> &amp;dto.RegisterResponse{Id: user.Id, Email: user.Email}, <span class="hljs-literal">nil</span>
+}
+</div></code></pre>
+<p><em>Caption: Snippet 5: Orkestrasi logika bisnis registrasi dengan manajemen transaksi dan pengiriman email asynchronous.</em></p>
+<hr>
+<h3 id="internalrepositoryunitofworkrepositoryfactorygofilednotetakernotefiber-beinternalrepositoryunitofworkrepositoryfactorygo">[internal/repository/unitofwork/repository_factory.go](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/repository_factory.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Factory Interface</code></p>
+<p><strong>Narasi Operasional:</strong>
+File ini mendefinisikan kontrak untuk pembuatan instance Unit of Work. Interface [RepositoryFactory](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/repository_factory.go#5-8) menyediakan satu metode [NewUnitOfWork](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/repository_factory.go#6-7) yang menerima konteks dan mengembalikan instance [UnitOfWork](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work.go#9-28) baru. Pendekatan ini memungkinkan Service layer untuk mendapatkan instance repository yang terisolasi per-request tanpa harus mengetahui detail implementasi koneksi database.</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">type</span> RepositoryFactory <span class="hljs-keyword">interface</span> {
+	NewUnitOfWork(ctx context.Context) UnitOfWork
+}
+</div></code></pre>
+<p><em>Caption: Snippet 6: Interface factory untuk pembuatan Unit of Work.</em></p>
+<hr>
+<h3 id="internalrepositoryunitofworkrepositoryfactoryimplgofilednotetakernotefiber-beinternalrepositoryunitofworkrepositoryfactoryimplgo">[internal/repository/unitofwork/repository_factory_impl.go](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/repository_factory_impl.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Factory Implementation</code></p>
+<p><strong>Narasi Operasional:</strong>
+Komponen ini mengimplementasikan [RepositoryFactory](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/repository_factory.go#5-8) dengan menyimpan referensi ke koneksi database GORM. Saat [NewUnitOfWork](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/repository_factory.go#6-7) dipanggil, ia membuat instance [UnitOfWork](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work.go#9-28) baru yang siap digunakan untuk operasi database. Setiap Unit of Work bersifat short-lived (per-request) untuk menjamin isolasi transaksi antar request.</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">type</span> RepositoryFactoryImpl <span class="hljs-keyword">struct</span> {
+	db *gorm.DB
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-title">NewRepositoryFactory</span><span class="hljs-params">(db *gorm.DB)</span> <span class="hljs-title">RepositoryFactory</span></span> {
+	<span class="hljs-keyword">return</span> &amp;RepositoryFactoryImpl{db: db}
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(f *RepositoryFactoryImpl)</span> <span class="hljs-title">NewUnitOfWork</span><span class="hljs-params">(ctx context.Context)</span> <span class="hljs-title">UnitOfWork</span></span> {
+	<span class="hljs-keyword">return</span> NewUnitOfWork(f.db)
+}
+</div></code></pre>
+<p><em>Caption: Snippet 7: Implementasi factory yang mengenkapsulasi koneksi database.</em></p>
+<hr>
+<h3 id="internalrepositoryunitofworkunitofworkgofilednotetakernotefiber-beinternalrepositoryunitofworkunitofworkgo">[internal/repository/unitofwork/unit_of_work.go](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Unit of Work Interface</code></p>
+<p><strong>Narasi Operasional:</strong>
+File ini mendefinisikan kontrak untuk pola Unit of Work yang mengelola transaksi database dan menyediakan akses ke seluruh repository. Interface ini mendeklarasikan metode transaksional ([Begin](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work_impl.go#31-38), [Commit](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work_impl.go#39-47), [Rollback](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work.go#12-13)) serta accessor untuk setiap repository domain ([UserRepository](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work.go#14-15), [NotebookRepository](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work_impl.go#63-66), dll). Dengan pola ini, Service layer dapat menjalankan beberapa operasi repository dalam satu transaksi atomik.</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">type</span> UnitOfWork <span class="hljs-keyword">interface</span> {
+	Begin(ctx context.Context) error
+	Commit() error
+	Rollback() error
+
+	UserRepository() contract.UserRepository
+	NotebookRepository() contract.NotebookRepository
+	NoteRepository() contract.NoteRepository
+	<span class="hljs-comment">// ... other repositories</span>
+}
+</div></code></pre>
+<p><em>Caption: Snippet 8: Interface Unit of Work untuk manajemen transaksi dan akses repository.</em></p>
+<hr>
+<h3 id="internalrepositoryunitofworkunitofworkimplgofilednotetakernotefiber-beinternalrepositoryunitofworkunitofworkimplgo">[internal/repository/unitofwork/unit_of_work_impl.go](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work_impl.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Unit of Work Implementation</code></p>
+<p><strong>Narasi Operasional:</strong>
+Komponen ini mengimplementasikan pola Unit of Work dengan memanfaatkan mekanisme transaksi GORM. Ia menyimpan referensi ke koneksi database (<code>db</code>) dan transaksi aktif (<code>tx</code>). Saat [Begin](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work_impl.go#31-38) dipanggil, ia memulai transaksi baru. Accessor seperti [UserRepository()](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work.go#14-15) mengembalikan instance repository yang terhubung ke transaksi aktif (jika ada) atau koneksi database biasa. Ini memastikan semua operasi repository dalam satu request berbagi transaksi yang sama.</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(u *UnitOfWorkImpl)</span> <span class="hljs-title">Begin</span><span class="hljs-params">(ctx context.Context)</span> <span class="hljs-title">error</span></span> {
+	<span class="hljs-keyword">if</span> u.tx != <span class="hljs-literal">nil</span> { <span class="hljs-keyword">return</span> fmt.Errorf(<span class="hljs-string">"transaction already started"</span>) }
+	u.tx = u.db.WithContext(ctx).Begin()
+	<span class="hljs-keyword">return</span> u.tx.Error
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(u *UnitOfWorkImpl)</span> <span class="hljs-title">Commit</span><span class="hljs-params">()</span> <span class="hljs-title">error</span></span> {
+	<span class="hljs-keyword">if</span> u.tx == <span class="hljs-literal">nil</span> { <span class="hljs-keyword">return</span> fmt.Errorf(<span class="hljs-string">"no transaction to commit"</span>) }
+	err := u.tx.Commit().Error
+	u.tx = <span class="hljs-literal">nil</span>
+	<span class="hljs-keyword">return</span> err
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(u *UnitOfWorkImpl)</span> <span class="hljs-title">UserRepository</span><span class="hljs-params">()</span> <span class="hljs-title">contract</span>.<span class="hljs-title">UserRepository</span></span> {
+	<span class="hljs-keyword">return</span> implementation.NewUserRepository(u.getDB())
+}
+</div></code></pre>
+<p><em>Caption: Snippet 9: Implementasi manajemen transaksi dan instansiasi repository.</em></p>
+<hr>
+<h3 id="internalrepositorycontractuserrepositorygofilednotetakernotefiber-beinternalrepositorycontractuserrepositorygo">[internal/repository/contract/user_repository.go](file:///d:/notetaker/notefiber-BE/internal/repository/contract/user_repository.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Repository Interface / Contract</code></p>
+<p><strong>Narasi Operasional:</strong>
+File ini mendefinisikan kontrak untuk seluruh operasi data terkait entitas User dan token-token terkait. Interface [UserRepository](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work.go#14-15) mendeklarasikan metode CRUD standar ([Create](file:///d:/notetaker/notefiber-BE/internal/repository/contract/user_repository.go#13-14), [Update](file:///d:/notetaker/notefiber-BE/internal/repository/contract/user_repository.go#14-15), [Delete](file:///d:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go#55-58), [FindOne](file:///d:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go#59-72), [FindAll](file:///d:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go#73-83)) serta operasi spesifik seperti [CreateEmailVerificationToken](file:///d:/notetaker/notefiber-BE/internal/repository/contract/user_repository.go#27-28), [ActivateUser](file:///d:/notetaker/notefiber-BE/internal/repository/contract/user_repository.go#36-37), dan [CreateRefreshToken](file:///d:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go#160-167). Kontrak ini memungkinkan Service layer berinteraksi dengan data tanpa mengetahui teknologi persistensi yang digunakan.</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">type</span> UserRepository <span class="hljs-keyword">interface</span> {
+	Create(ctx context.Context, user *entity.User) error
+	FindOne(ctx context.Context, specs ...specification.Specification) (*entity.User, error)
+	
+	<span class="hljs-comment">// Token Management</span>
+	CreateEmailVerificationToken(ctx context.Context, token *entity.EmailVerificationToken) error
+	FindEmailVerificationToken(ctx context.Context, specs ...specification.Specification) (*entity.EmailVerificationToken, error)
+	DeleteEmailVerificationToken(ctx context.Context, id uuid.UUID) error
+
+	<span class="hljs-comment">// Business Specific</span>
+	ActivateUser(ctx context.Context, userId uuid.UUID) error
+	<span class="hljs-comment">// ...</span>
+}
+</div></code></pre>
+<p><em>Caption: Snippet 10: Kontrak repository untuk akses data User dan Token.</em></p>
+<hr>
+<h3 id="internalrepositoryspecificationspecificationgofilednotetakernotefiber-beinternalrepositoryspecificationspecificationgo">[internal/repository/specification/specification.go](file:///d:/notetaker/notefiber-BE/internal/repository/specification/specification.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Specification Pattern Interface</code></p>
+<p><strong>Narasi Operasional:</strong>
+File ini mendefinisikan interface dasar untuk pola Specification yang digunakan untuk membangun query database secara deklaratif. Setiap specification mengimplementasikan metode [Apply](file:///d:/notetaker/notefiber-BE/internal/repository/specification/user_specifications.go#45-48) yang memodifikasi query GORM dengan kondisi tertentu. Pendekatan ini memisahkan logika query dari repository dan memungkinkan komposisi kondisi query yang fleksibel.</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">type</span> Specification <span class="hljs-keyword">interface</span> {
+	Apply(db *gorm.DB) *gorm.DB
+}
+</div></code></pre>
+<p><em>Caption: Snippet 11: Interface dasar untuk pola Specification.</em></p>
+<hr>
+<h3 id="internalrepositoryspecificationuserspecificationsgofilednotetakernotefiber-beinternalrepositoryspecificationuserspecificationsgo">[internal/repository/specification/user_specifications.go](file:///d:/notetaker/notefiber-BE/internal/repository/specification/user_specifications.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Specification Implementation</code></p>
+<p><strong>Narasi Operasional:</strong>
+Komponen ini menyediakan implementasi specification khusus untuk domain User. [ByEmail](file:///d:/notetaker/notefiber-BE/internal/repository/specification/user_specifications.go#9-12) menambahkan filter berdasarkan alamat email, [UserOwnedBy](file:///d:/notetaker/notefiber-BE/internal/repository/specification/user_specifications.go#17-20) menambahkan filter berdasarkan ID user (digunakan untuk token), dan [ByToken](file:///d:/notetaker/notefiber-BE/internal/repository/specification/user_specifications.go#33-36) menambahkan filter berdasarkan nilai token. Specification ini digunakan oleh Service layer untuk membangun query pencarian yang spesifik tanpa menulis SQL secara langsung.</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">type</span> ByEmail <span class="hljs-keyword">struct</span> { Email <span class="hljs-keyword">string</span> }
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(s ByEmail)</span> <span class="hljs-title">Apply</span><span class="hljs-params">(db *gorm.DB)</span> *<span class="hljs-title">gorm</span>.<span class="hljs-title">DB</span></span> {
+	<span class="hljs-keyword">return</span> db.Where(<span class="hljs-string">"email = ?"</span>, s.Email)
+}
+
+<span class="hljs-keyword">type</span> UserOwnedBy <span class="hljs-keyword">struct</span> { UserID uuid.UUID }
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(s UserOwnedBy)</span> <span class="hljs-title">Apply</span><span class="hljs-params">(db *gorm.DB)</span> *<span class="hljs-title">gorm</span>.<span class="hljs-title">DB</span></span> {
+	<span class="hljs-keyword">return</span> db.Where(<span class="hljs-string">"user_id = ?"</span>, s.UserID)
+}
+
+<span class="hljs-keyword">type</span> ByToken <span class="hljs-keyword">struct</span> { Token <span class="hljs-keyword">string</span> }
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(s ByToken)</span> <span class="hljs-title">Apply</span><span class="hljs-params">(db *gorm.DB)</span> *<span class="hljs-title">gorm</span>.<span class="hljs-title">DB</span></span> {
+	<span class="hljs-keyword">return</span> db.Where(<span class="hljs-string">"token = ?"</span>, s.Token)
+}
+</div></code></pre>
+<p><em>Caption: Snippet 12: Implementasi specification untuk pencarian User dan Token.</em></p>
+<hr>
+<h3 id="internalrepositoryimplementationuserrepositoryimplgofilednotetakernotefiber-beinternalrepositoryimplementationuserrepositoryimplgo">[internal/repository/implementation/user_repository_impl.go](file:///d:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Repository Implementation</code></p>
+<p><strong>Narasi Operasional:</strong>
+Komponen ini mengimplementasikan kontrak [UserRepository](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work.go#14-15) dengan memanfaatkan GORM sebagai ORM. Ia menerima koneksi database dan menggunakan [UserMapper](file:///d:/notetaker/notefiber-BE/internal/mapper/user_mapper.go#8-9) untuk mentransformasi antara Entity (domain) dan Model (database). Metode [Create](file:///d:/notetaker/notefiber-BE/internal/repository/contract/user_repository.go#13-14) menerima entity User dari Service, mengkonversinya ke Model, mempersistenkan ke database, dan mengembalikan entity yang sudah diperkaya dengan ID yang di-generate. Metode [CreateEmailVerificationToken](file:///d:/notetaker/notefiber-BE/internal/repository/contract/user_repository.go#27-28) mengikuti pola serupa untuk token verifikasi.</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(r *UserRepositoryImpl)</span> <span class="hljs-title">Create</span><span class="hljs-params">(ctx context.Context, user *entity.User)</span> <span class="hljs-title">error</span></span> {
+	modelUser := r.mapper.ToModel(user)
+	<span class="hljs-keyword">if</span> err := r.db.WithContext(ctx).Create(modelUser).Error; err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> err
+	}
+	*user = *r.mapper.ToEntity(modelUser)
+	<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(r *UserRepositoryImpl)</span> <span class="hljs-title">CreateEmailVerificationToken</span><span class="hljs-params">(ctx context.Context, token *entity.EmailVerificationToken)</span> <span class="hljs-title">error</span></span> {
+	m := r.mapper.EmailVerificationTokenToModel(token)
+	<span class="hljs-keyword">if</span> err := r.db.WithContext(ctx).Create(m).Error; err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">return</span> err
+	}
+	<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(r *UserRepositoryImpl)</span> <span class="hljs-title">FindOne</span><span class="hljs-params">(ctx context.Context, specs ...specification.Specification)</span> <span class="hljs-params">(*entity.User, error)</span></span> {
+	<span class="hljs-keyword">var</span> modelUser model.User
+	query := r.applySpecifications(r.db.WithContext(ctx), specs...)
+	<span class="hljs-keyword">if</span> err := query.First(&amp;modelUser).Error; err != <span class="hljs-literal">nil</span> {
+		<span class="hljs-keyword">if</span> errors.Is(err, gorm.ErrRecordNotFound) { <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, <span class="hljs-literal">nil</span> }
+		<span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span>, err
+	}
+	<span class="hljs-keyword">return</span> r.mapper.ToEntity(&amp;modelUser), <span class="hljs-literal">nil</span>
+}
+</div></code></pre>
+<p><em>Caption: Snippet 13: Implementasi persistensi data dengan transformasi Entity-Model.</em></p>
+<hr>
+<h3 id="internalentityuserentitygofilednotetakernotefiber-beinternalentityuserentitygo">[internal/entity/user_entity.go](file:///d:/notetaker/notefiber-BE/internal/entity/user_entity.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Domain Entity</code></p>
+<p><strong>Narasi Operasional:</strong>
+File ini mendefinisikan struktur data domain yang merepresentasikan konsep bisnis User dan token-token terkait. Entity [User](file:///d:/notetaker/notefiber-BE/internal/model/user_model.go#10-26) menyimpan atribut identitas (email, nama), kredensial (password hash), status akun, dan metadata audit. Entity [EmailVerificationToken](file:///d:/notetaker/notefiber-BE/internal/model/user_model.go#57-64) merepresentasikan token OTP dengan masa berlaku. Entity ini digunakan eksklusif di layer Service dan Repository, terpisah dari representasi database (Model) dan representasi API (DTO).</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">type</span> UserRole <span class="hljs-keyword">string</span>
+<span class="hljs-keyword">type</span> UserStatus <span class="hljs-keyword">string</span>
+
+<span class="hljs-keyword">const</span> (
+	UserRoleUser  UserRole = <span class="hljs-string">"user"</span>
+	UserRoleAdmin UserRole = <span class="hljs-string">"admin"</span>
+
+	UserStatusPending UserStatus = <span class="hljs-string">"pending"</span>
+	UserStatusActive  UserStatus = <span class="hljs-string">"active"</span>
+	UserStatusBlocked UserStatus = <span class="hljs-string">"blocked"</span>
+)
+
+<span class="hljs-keyword">type</span> User <span class="hljs-keyword">struct</span> {
+	Id            uuid.UUID
+	Email         <span class="hljs-keyword">string</span>
+	PasswordHash  *<span class="hljs-keyword">string</span>
+	FullName      <span class="hljs-keyword">string</span>
+	Role          UserRole
+	Status        UserStatus
+	EmailVerified <span class="hljs-keyword">bool</span>
+	<span class="hljs-comment">// ...</span>
+}
+
+<span class="hljs-keyword">type</span> EmailVerificationToken <span class="hljs-keyword">struct</span> {
+	Id        uuid.UUID
+	UserId    uuid.UUID
+	Token     <span class="hljs-keyword">string</span>
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+</div></code></pre>
+<p><em>Caption: Snippet 14: Definisi Entity domain untuk User dan Token Verifikasi.</em></p>
+<hr>
+<h3 id="internalmodelusermodelgofilednotetakernotefiber-beinternalmodelusermodelgo">[internal/model/user_model.go](file:///d:/notetaker/notefiber-BE/internal/model/user_model.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Database Model (ORM)</code></p>
+<p><strong>Narasi Operasional:</strong>
+Komponen ini mendefinisikan struktur data yang dipetakan langsung ke tabel database menggunakan tag GORM. Model [User](file:///d:/notetaker/notefiber-BE/internal/model/user_model.go#10-26) dipetakan ke tabel <code>users</code> dengan konfigurasi kolom (tipe data, constraint, default value) yang eksplisit. Model [EmailVerificationToken](file:///d:/notetaker/notefiber-BE/internal/model/user_model.go#57-64) dipetakan ke tabel <code>email_verification_tokens</code>. Pemisahan Model dari Entity memungkinkan evolusi skema database tanpa mempengaruhi logika bisnis.</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">type</span> User <span class="hljs-keyword">struct</span> {
+	Id            uuid.UUID      <span class="hljs-string">`gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`</span>
+	Email         <span class="hljs-keyword">string</span>         <span class="hljs-string">`gorm:"type:varchar(255);uniqueIndex;not null"`</span>
+	PasswordHash  *<span class="hljs-keyword">string</span>        <span class="hljs-string">`gorm:"type:varchar(255)"`</span>
+	FullName      <span class="hljs-keyword">string</span>         <span class="hljs-string">`gorm:"type:varchar(255);not null"`</span>
+	Role          <span class="hljs-keyword">string</span>         <span class="hljs-string">`gorm:"type:varchar(50);not null;default:'user'"`</span>
+	Status        <span class="hljs-keyword">string</span>         <span class="hljs-string">`gorm:"type:varchar(50);not null;default:'pending'"`</span>
+	EmailVerified <span class="hljs-keyword">bool</span>           <span class="hljs-string">`gorm:"default:false"`</span>
+	<span class="hljs-comment">// ...</span>
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(User)</span> <span class="hljs-title">TableName</span><span class="hljs-params">()</span> <span class="hljs-title">string</span></span> { <span class="hljs-keyword">return</span> <span class="hljs-string">"users"</span> }
+
+<span class="hljs-keyword">type</span> EmailVerificationToken <span class="hljs-keyword">struct</span> {
+	Id        uuid.UUID <span class="hljs-string">`gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`</span>
+	UserId    uuid.UUID <span class="hljs-string">`gorm:"type:uuid;not null;index"`</span>
+	Token     <span class="hljs-keyword">string</span>    <span class="hljs-string">`gorm:"type:varchar(255);not null;index"`</span>
+	ExpiresAt time.Time <span class="hljs-string">`gorm:"not null"`</span>
+	CreatedAt time.Time <span class="hljs-string">`gorm:"autoCreateTime"`</span>
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(EmailVerificationToken)</span> <span class="hljs-title">TableName</span><span class="hljs-params">()</span> <span class="hljs-title">string</span></span> { <span class="hljs-keyword">return</span> <span class="hljs-string">"email_verification_tokens"</span> }
+</div></code></pre>
+<p><em>Caption: Snippet 15: Model ORM dengan mapping ke tabel database.</em></p>
+<hr>
+<h3 id="internalmapperusermappergofilednotetakernotefiber-beinternalmapperusermappergo">[internal/mapper/user_mapper.go](file:///d:/notetaker/notefiber-BE/internal/mapper/user_mapper.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Data Mapper</code></p>
+<p><strong>Narasi Operasional:</strong>
+Komponen ini menyediakan fungsi konversi dua arah antara Entity (domain) dan Model (database). [ToModel](file:///d:/notetaker/notefiber-BE/internal/mapper/user_mapper.go#35-55) mentransformasi Entity User menjadi Model User sebelum persistensi, termasuk konversi tipe enum ke string. [ToEntity](file:///d:/notetaker/notefiber-BE/internal/mapper/user_mapper.go#14-34) melakukan transformasi sebaliknya setelah data diambil dari database. Mapper juga menyediakan fungsi serupa untuk token ([EmailVerificationTokenToModel](file:///d:/notetaker/notefiber-BE/internal/mapper/user_mapper.go#143-155), [EmailVerificationTokenToEntity](file:///d:/notetaker/notefiber-BE/internal/mapper/user_mapper.go#130-142)). Pemisahan ini menjaga kemurnian layer domain dari concern persistensi.</p>
+<pre class="hljs"><code><div><span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(m *UserMapper)</span> <span class="hljs-title">ToEntity</span><span class="hljs-params">(u *model.User)</span> *<span class="hljs-title">entity</span>.<span class="hljs-title">User</span></span> {
+	<span class="hljs-keyword">if</span> u == <span class="hljs-literal">nil</span> { <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span> }
+	<span class="hljs-keyword">return</span> &amp;entity.User{
+		Id:            u.Id,
+		Email:         u.Email,
+		PasswordHash:  u.PasswordHash,
+		FullName:      u.FullName,
+		Role:          entity.UserRole(u.Role),
+		Status:        entity.UserStatus(u.Status),
+		EmailVerified: u.EmailVerified,
+		<span class="hljs-comment">// ...</span>
+	}
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(m *UserMapper)</span> <span class="hljs-title">ToModel</span><span class="hljs-params">(u *entity.User)</span> *<span class="hljs-title">model</span>.<span class="hljs-title">User</span></span> {
+	<span class="hljs-keyword">if</span> u == <span class="hljs-literal">nil</span> { <span class="hljs-keyword">return</span> <span class="hljs-literal">nil</span> }
+	<span class="hljs-keyword">return</span> &amp;model.User{
+		Id:            u.Id,
+		Email:         u.Email,
+		PasswordHash:  u.PasswordHash,
+		Role:          <span class="hljs-keyword">string</span>(u.Role),
+		Status:        <span class="hljs-keyword">string</span>(u.Status),
+		<span class="hljs-comment">// ...</span>
+	}
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(m *UserMapper)</span> <span class="hljs-title">EmailVerificationTokenToModel</span><span class="hljs-params">(t *entity.EmailVerificationToken)</span> *<span class="hljs-title">model</span>.<span class="hljs-title">EmailVerificationToken</span></span> {
+	<span class="hljs-comment">// ... transformation logic</span>
+}
+</div></code></pre>
+<p><em>Caption: Snippet 16: Transformasi bidirectional antara Entity dan Model.</em></p>
+<hr>
+<h3 id="internalpkgmaileremailservicegofilednotetakernotefiber-beinternalpkgmaileremailservicego">[internal/pkg/mailer/email_service.go](file:///d:/notetaker/notefiber-BE/internal/pkg/mailer/email_service.go)</h3>
+<p><strong>Layer Terdeteksi:</strong> <code>Infrastructure / External Service Adapter</code></p>
+<p><strong>Narasi Operasional:</strong>
+Komponen ini mengorkestrasi pengiriman email transaksional menggunakan protokol SMTP. Interface [IEmailService](file:///d:/notetaker/notefiber-BE/internal/pkg/mailer/email_service.go#11-15) mendefinisikan kontrak untuk pengiriman OTP dan Reset Token. Implementasi [emailService](file:///d:/notetaker/notefiber-BE/internal/pkg/mailer/email_service.go#16-21) mengenkapsulasi konfigurasi SMTP dialer dan menyediakan template HTML untuk setiap jenis email. Metode [SendOTP](file:///d:/notetaker/notefiber-BE/internal/pkg/mailer/email_service.go#35-61) dipanggil secara asynchronous oleh [AuthService](file:///d:/notetaker/notefiber-BE/internal/service/auth_service.go#26-35) setelah transaksi database berhasil di-commit, sehingga kegagalan pengiriman email tidak mempengaruhi keberhasilan registrasi.</p>
+<pre class="hljs"><code><div><span class="hljs-keyword">type</span> IEmailService <span class="hljs-keyword">interface</span> {
+	SendOTP(toEmail, otp <span class="hljs-keyword">string</span>) error
+	SendResetToken(toEmail, token <span class="hljs-keyword">string</span>) error
+}
+
+<span class="hljs-function"><span class="hljs-keyword">func</span> <span class="hljs-params">(s *emailService)</span> <span class="hljs-title">SendOTP</span><span class="hljs-params">(toEmail, otp <span class="hljs-keyword">string</span>)</span> <span class="hljs-title">error</span></span> {
+	m := gomail.NewMessage()
+	m.SetHeader(<span class="hljs-string">"From"</span>, s.senderEmail)
+	m.SetHeader(<span class="hljs-string">"To"</span>, toEmail)
+	m.SetHeader(<span class="hljs-string">"Subject"</span>, <span class="hljs-string">"Your Verification Code"</span>)
+	
+	body := fmt.Sprintf(<span class="hljs-string">`
+		&lt;div style="font-family: Arial, sans-serif; padding: 20px;"&gt;
+			&lt;h2&gt;Welcome to NoteFiber!&lt;/h2&gt;
+			&lt;p&gt;Your verification code is:&lt;/p&gt;
+			&lt;h1 style="color: #4CAF50; letter-spacing: 5px;"&gt;%s&lt;/h1&gt;
+			&lt;p&gt;This code will expire in 15 minutes.&lt;/p&gt;
+		&lt;/div&gt;
+	`</span>, otp)
+	
+	m.SetBody(<span class="hljs-string">"text/html"</span>, body)
+	<span class="hljs-keyword">return</span> s.dialer.DialAndSend(m)
+}
+</div></code></pre>
+<p><em>Caption: Snippet 17: Implementasi pengiriman email OTP dengan template HTML.</em></p>
+<hr>
+<h2 id="c-ringkasan-layer-arsitektur">C. Ringkasan Layer Arsitektur</h2>
+<table>
+<thead>
+<tr>
+<th>No</th>
+<th>Layer</th>
+<th>File</th>
+<th>Tanggung Jawab</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>HTTP Server</td>
+<td>[server/server.go](file:///d:/notetaker/notefiber-BE/internal/server/server.go)</td>
+<td>Inisialisasi Fiber, middleware, route registration</td>
+</tr>
+<tr>
+<td>2</td>
+<td>DI Container</td>
+<td>[bootstrap/container.go](file:///d:/notetaker/notefiber-BE/internal/bootstrap/container.go)</td>
+<td>Dependency wiring &amp; injection</td>
+</tr>
+<tr>
+<td>3</td>
+<td>DTO</td>
+<td>[dto/auth_payment_dto.go](file:///d:/notetaker/notefiber-BE/internal/dto/auth_payment_dto.go)</td>
+<td>Kontrak data request/response</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Controller</td>
+<td>[controller/auth_controller.go](file:///d:/notetaker/notefiber-BE/internal/controller/auth_controller.go)</td>
+<td>HTTP handler, parsing, response formatting</td>
+</tr>
+<tr>
+<td>5</td>
+<td>Service</td>
+<td>[service/auth_service.go](file:///d:/notetaker/notefiber-BE/internal/service/auth_service.go)</td>
+<td>Orkestrasi logika bisnis</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Factory Interface</td>
+<td>[unitofwork/repository_factory.go](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/repository_factory.go)</td>
+<td>Kontrak pembuatan Unit of Work</td>
+</tr>
+<tr>
+<td>7</td>
+<td>Factory Impl</td>
+<td>[unitofwork/repository_factory_impl.go](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/repository_factory_impl.go)</td>
+<td>Implementasi factory</td>
+</tr>
+<tr>
+<td>8</td>
+<td>UoW Interface</td>
+<td>[unitofwork/unit_of_work.go](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work.go)</td>
+<td>Kontrak transaksi &amp; akses repository</td>
+</tr>
+<tr>
+<td>9</td>
+<td>UoW Impl</td>
+<td>[unitofwork/unit_of_work_impl.go](file:///d:/notetaker/notefiber-BE/internal/repository/unitofwork/unit_of_work_impl.go)</td>
+<td>Manajemen transaksi GORM</td>
+</tr>
+<tr>
+<td>10</td>
+<td>Repository Contract</td>
+<td>[contract/user_repository.go](file:///d:/notetaker/notefiber-BE/internal/repository/contract/user_repository.go)</td>
+<td>Interface akses data User</td>
+</tr>
+<tr>
+<td>11</td>
+<td>Specification Base</td>
+<td>[specification/specification.go](file:///d:/notetaker/notefiber-BE/internal/repository/specification/specification.go)</td>
+<td>Interface pola specification</td>
+</tr>
+<tr>
+<td>12</td>
+<td>User Specifications</td>
+<td>[specification/user_specifications.go](file:///d:/notetaker/notefiber-BE/internal/repository/specification/user_specifications.go)</td>
+<td>Query predicates untuk User</td>
+</tr>
+<tr>
+<td>13</td>
+<td>Repository Impl</td>
+<td>[implementation/user_repository_impl.go](file:///d:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go)</td>
+<td>Persistensi data dengan GORM</td>
+</tr>
+<tr>
+<td>14</td>
+<td>Entity</td>
+<td>[entity/user_entity.go](file:///d:/notetaker/notefiber-BE/internal/entity/user_entity.go)</td>
+<td>Objek domain</td>
+</tr>
+<tr>
+<td>15</td>
+<td>Model</td>
+<td>[model/user_model.go](file:///d:/notetaker/notefiber-BE/internal/model/user_model.go)</td>
+<td>Representasi tabel database</td>
+</tr>
+<tr>
+<td>16</td>
+<td>Mapper</td>
+<td>[mapper/user_mapper.go](file:///d:/notetaker/notefiber-BE/internal/mapper/user_mapper.go)</td>
+<td>Transformasi Entity &lt;-&gt; Model</td>
+</tr>
+<tr>
+<td>17</td>
+<td>Mailer</td>
+<td>[pkg/mailer/email_service.go](file:///d:/notetaker/notefiber-BE/internal/pkg/mailer/email_service.go)</td>
+<td>Pengiriman email SMTP</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<p><em>Dokumen ini di-generate dalam mode READ-ONLY tanpa modifikasi terhadap kode sumber.</em></p>
+
+</body>
+</html>

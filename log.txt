@@ -1,0 +1,449 @@
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:194
+[22.344ms] [rows:1] SELECT users.*, COALESCE(users.avatar_url, user_providers.avatar_url) as avatar_url_resolved FROM "users" LEFT JOIN user_providers ON users.id = user_providers.user_id WHERE users.id = 'd09dacfa-af1f-40f8-8184-00310986ac6f' ORDER BY user_providers.created_at DESC LIMIT 1
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:194
+[1.030ms] [rows:1] SELECT users.*, COALESCE(users.avatar_url, user_providers.avatar_url) as avatar_url_resolved FROM "users" LEFT JOIN user_providers ON users.id = user_providers.user_id WHERE users.id = 'd09dacfa-af1f-40f8-8184-00310986ac6f' ORDER BY user_providers.created_at DESC LIMIT 1
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:75
+[5.739ms] [rows:7] SELECT * FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[5.986ms] [rows:4] SELECT * FROM "notes" WHERE notebook_id IN ($1$,$2$,$3$,$4$,$5$,$6$,$7$) AND user_id = $8$ AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:61
+[1.514ms] [rows:1] SELECT * FROM "notes" WHERE id = $1$ AND user_id = $2$ AND "notes"."deleted_at" IS NULL ORDER BY "notes"."id" LIMIT $3$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[1.639ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND user_id = $2$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $3$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[0.545ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND user_id = $2$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $3$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[0.537ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND user_id = $2$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $3$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[0.511ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND user_id = $2$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $3$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:63
+[2.183ms] [rows:1] SELECT * FROM "users" WHERE id = $1$ AND "users"."deleted_at" IS NULL ORDER BY "users"."id" LIMIT $2$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[7.608ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ AND status = $2$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[4.406ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[9.378ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:84
+[1.564ms] [rows:1] SELECT count(*) FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:82
+[1.095ms] [rows:1] SELECT count(*) FROM "notes" WHERE user_id = $1$ AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[1.108ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ ORDER BY created_at DESC
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.653ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[1.164ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:75
+[1.027ms] [rows:7] SELECT * FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[1.351ms] [rows:4] SELECT * FROM "notes" WHERE notebook_id IN ($1$,$2$,$3$,$4$,$5$,$6$,$7$) AND user_id = $8$ AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:61
+[0.857ms] [rows:1] SELECT * FROM "notes" WHERE id = $1$ AND user_id = $2$ AND "notes"."deleted_at" IS NULL ORDER BY "notes"."id" LIMIT $3$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[1.053ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND user_id = $2$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $3$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[1.131ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND user_id = $2$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $3$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[1.212ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND user_id = $2$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $3$
+
+2025/12/29 21:03:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[0.510ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND user_id = $2$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $3$
+2025/12/29 21:03:52 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+
+2025/12/29 21:03:58 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:75
+[1.519ms] [rows:7] SELECT * FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:03:58 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[0.735ms] [rows:4] SELECT * FROM "notes" WHERE notebook_id IN ($1$,$2$,$3$,$4$,$5$,$6$,$7$) AND user_id = $8$ AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:03:58 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:75
+[1.008ms] [rows:7] SELECT * FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:03:58 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[0.511ms] [rows:4] SELECT * FROM "notes" WHERE notebook_id IN ($1$,$2$,$3$,$4$,$5$,$6$,$7$) AND user_id = $8$ AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:04:00 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:63
+[0.512ms] [rows:1] SELECT * FROM "users" WHERE id = $1$ AND "users"."deleted_at" IS NULL ORDER BY "users"."id" LIMIT $2$
+
+2025/12/29 21:04:00 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[0.510ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ AND status = $2$
+
+2025/12/29 21:04:00 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.609ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:04:00 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[1.268ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:04:00 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:84
+[0.634ms] [rows:1] SELECT count(*) FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:04:00 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:82
+[0.000ms] [rows:1] SELECT count(*) FROM "notes" WHERE user_id = $1$ AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:04:00 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:38
+[10.730ms] [rows:1] INSERT INTO "notebooks" ("name","parent_id","user_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+
+2025/12/29 21:04:00 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:75
+[0.522ms] [rows:8] SELECT * FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:04:00 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[1.730ms] [rows:4] SELECT * FROM "notes" WHERE notebook_id IN ($1$,$2$,$3$,$4$,$5$,$6$,$7$,$8$) AND user_id = $9$ AND "notes"."deleted_at" IS NULL
+2025/12/29 21:04:02 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+
+2025/12/29 21:04:07 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[1.036ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND user_id = $2$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $3$
+
+2025/12/29 21:04:07 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:49
+[1.073ms] [rows:1] UPDATE "notebooks" SET "name"=$1$,"parent_id"=$2$,"user_id"=$3$,"created_at"=$4$,"updated_at"=$5$,"deleted_at"=$6$ WHERE "notebooks"."deleted_at" IS NULL AND "id" = $7$
+
+2025/12/29 21:04:07 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[1.159ms] [rows:0] SELECT * FROM "notes" WHERE notebook_id = $1$ AND user_id = $2$ AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:04:07 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:75
+[1.009ms] [rows:8] SELECT * FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:04:07 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[1.042ms] [rows:4] SELECT * FROM "notes" WHERE notebook_id IN ($1$,$2$,$3$,$4$,$5$,$6$,$7$,$8$) AND user_id = $9$ AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:63
+[1.027ms] [rows:1] SELECT * FROM "users" WHERE id = $1$ AND "users"."deleted_at" IS NULL ORDER BY "users"."id" LIMIT $2$
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[0.658ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ AND status = $2$
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.728ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[2.262ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:84
+[0.555ms] [rows:1] SELECT count(*) FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:82
+[1.009ms] [rows:1] SELECT count(*) FROM "notes" WHERE user_id = $1$ AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:38
+[3.067ms] [rows:1] INSERT INTO "notes" ("title","content","notebook_id","user_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$,$8$) RETURNING "id"
+2025/12/29 21:04:10 [INFO] Processing note embedding for NoteId: 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:61
+[0.607ms] [rows:1] SELECT * FROM "notes" WHERE id = $1$ AND "notes"."deleted_at" IS NULL ORDER BY "notes"."id" LIMIT $2$
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[1.122ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $2$
+2025/12/29 21:04:10 [INFO] Generating embedding for note 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75 (content length: 160)
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:75
+[7.566ms] [rows:8] SELECT * FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:04:10 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[1.666ms] [rows:5] SELECT * FROM "notes" WHERE notebook_id IN ($1$,$2$,$3$,$4$,$5$,$6$,$7$,$8$) AND user_id = $9$ AND "notes"."deleted_at" IS NULL
+2025/12/29 21:04:12 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+2025/12/29 21:04:13 [INFO] Embedding generated successfully (dimensions: 768)
+2025/12/29 21:04:13 [INFO] Deleting old embeddings for note 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+
+2025/12/29 21:04:13 D:/notetaker/notefiber-BE/internal/repository/implementation/note_embedding_repository_impl.go:60
+[2.991ms] [rows:0] UPDATE "note_embeddings" SET "deleted_at"=$1$ WHERE note_id = $2$ AND "note_embeddings"."deleted_at" IS NULL
+2025/12/29 21:04:13 [INFO] Creating new embedding for note 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+
+2025/12/29 21:04:13 D:/notetaker/notefiber-BE/internal/repository/implementation/note_embedding_repository_impl.go:39
+[5.606ms] [rows:1] INSERT INTO "note_embeddings" ("document","embedding_value","note_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+2025/12/29 21:04:13 [SUCCESS] Note embedding processed successfully for NoteId: 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+
+2025/12/29 21:04:40 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:63
+[1.074ms] [rows:1] SELECT * FROM "users" WHERE id = $1$ AND "users"."deleted_at" IS NULL ORDER BY "users"."id" LIMIT $2$
+
+2025/12/29 21:04:40 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[0.564ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ AND status = $2$
+
+2025/12/29 21:04:40 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[1.022ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:04:40 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[1.545ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:04:40 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:84
+[1.020ms] [rows:1] SELECT count(*) FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:04:40 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:82
+[1.016ms] [rows:1] SELECT count(*) FROM "notes" WHERE user_id = $1$ AND "notes"."deleted_at" IS NULL
+2025/12/29 21:04:42 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+
+2025/12/29 21:05:10 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:63
+[0.000ms] [rows:1] SELECT * FROM "users" WHERE id = $1$ AND "users"."deleted_at" IS NULL ORDER BY "users"."id" LIMIT $2$
+
+2025/12/29 21:05:10 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[1.894ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ AND status = $2$
+
+2025/12/29 21:05:10 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.603ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:05:10 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.603ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:05:10 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:84
+[0.565ms] [rows:1] SELECT count(*) FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:05:10 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:82
+[0.000ms] [rows:1] SELECT count(*) FROM "notes" WHERE user_id = $1$ AND "notes"."deleted_at" IS NULL
+2025/12/29 21:05:12 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+
+2025/12/29 21:05:15 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:61
+[1.705ms] [rows:1] SELECT * FROM "notes" WHERE id = $1$ AND user_id = $2$ AND "notes"."deleted_at" IS NULL ORDER BY "notes"."id" LIMIT $3$
+
+2025/12/29 21:05:15 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:47
+[1.681ms] [rows:1] UPDATE "notes" SET "title"=$1$,"content"=$2$,"notebook_id"=$3$,"user_id"=$4$,"created_at"=$5$,"updated_at"=$6$,"deleted_at"=$7$ WHERE "notes"."deleted_at" IS NULL AND "id" = $8$
+2025/12/29 21:05:15 [INFO] Processing note embedding for NoteId: 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+
+2025/12/29 21:05:15 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:61
+[1.388ms] [rows:1] SELECT * FROM "notes" WHERE id = $1$ AND "notes"."deleted_at" IS NULL ORDER BY "notes"."id" LIMIT $2$
+
+2025/12/29 21:05:15 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[0.757ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $2$
+2025/12/29 21:05:15 [INFO] Generating embedding for note 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75 (content length: 1196)
+
+2025/12/29 21:05:15 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:75
+[0.600ms] [rows:8] SELECT * FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:05:15 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[0.906ms] [rows:5] SELECT * FROM "notes" WHERE notebook_id IN ($1$,$2$,$3$,$4$,$5$,$6$,$7$,$8$) AND user_id = $9$ AND "notes"."deleted_at" IS NULL
+2025/12/29 21:05:15 [INFO] Embedding generated successfully (dimensions: 768)
+2025/12/29 21:05:15 [INFO] Deleting old embeddings for note 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+
+2025/12/29 21:05:15 D:/notetaker/notefiber-BE/internal/repository/implementation/note_embedding_repository_impl.go:60
+[0.512ms] [rows:1] UPDATE "note_embeddings" SET "deleted_at"=$1$ WHERE note_id = $2$ AND "note_embeddings"."deleted_at" IS NULL
+2025/12/29 21:05:15 [INFO] Creating new embedding for note 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+
+2025/12/29 21:05:15 D:/notetaker/notefiber-BE/internal/repository/implementation/note_embedding_repository_impl.go:39
+[6.816ms] [rows:1] INSERT INTO "note_embeddings" ("document","embedding_value","note_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+2025/12/29 21:05:15 [SUCCESS] Note embedding processed successfully for NoteId: 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+2025/12/29 21:05:17 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+
+2025/12/29 21:05:40 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:63
+[0.516ms] [rows:1] SELECT * FROM "users" WHERE id = $1$ AND "users"."deleted_at" IS NULL ORDER BY "users"."id" LIMIT $2$
+
+2025/12/29 21:05:40 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[0.514ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ AND status = $2$
+
+2025/12/29 21:05:40 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.000ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:05:40 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.521ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:05:40 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:84
+[0.521ms] [rows:1] SELECT count(*) FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:05:40 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:82
+[0.000ms] [rows:1] SELECT count(*) FROM "notes" WHERE user_id = $1$ AND "notes"."deleted_at" IS NULL
+2025/12/29 21:05:42 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+
+2025/12/29 21:06:05 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:61
+[2.093ms] [rows:1] SELECT * FROM "notes" WHERE id = $1$ AND user_id = $2$ AND "notes"."deleted_at" IS NULL ORDER BY "notes"."id" LIMIT $3$
+
+2025/12/29 21:06:05 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:47
+[2.273ms] [rows:1] UPDATE "notes" SET "title"=$1$,"content"=$2$,"notebook_id"=$3$,"user_id"=$4$,"created_at"=$5$,"updated_at"=$6$,"deleted_at"=$7$ WHERE "notes"."deleted_at" IS NULL AND "id" = $8$
+2025/12/29 21:06:05 [INFO] Processing note embedding for NoteId: 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+
+2025/12/29 21:06:05 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:61
+[0.894ms] [rows:1] SELECT * FROM "notes" WHERE id = $1$ AND "notes"."deleted_at" IS NULL ORDER BY "notes"."id" LIMIT $2$
+
+2025/12/29 21:06:05 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:63
+[0.694ms] [rows:1] SELECT * FROM "notebooks" WHERE id = $1$ AND "notebooks"."deleted_at" IS NULL ORDER BY "notebooks"."id" LIMIT $2$
+2025/12/29 21:06:05 [INFO] Generating embedding for note 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75 (content length: 1196)
+
+2025/12/29 21:06:05 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:75
+[1.548ms] [rows:8] SELECT * FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:06:05 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[0.334ms] [rows:5] SELECT * FROM "notes" WHERE notebook_id IN ($1$,$2$,$3$,$4$,$5$,$6$,$7$,$8$) AND user_id = $9$ AND "notes"."deleted_at" IS NULL
+2025/12/29 21:06:06 [INFO] Embedding generated successfully (dimensions: 768)
+2025/12/29 21:06:06 [INFO] Deleting old embeddings for note 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+
+2025/12/29 21:06:06 D:/notetaker/notefiber-BE/internal/repository/implementation/note_embedding_repository_impl.go:60
+[2.478ms] [rows:1] UPDATE "note_embeddings" SET "deleted_at"=$1$ WHERE note_id = $2$ AND "note_embeddings"."deleted_at" IS NULL
+2025/12/29 21:06:06 [INFO] Creating new embedding for note 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+
+2025/12/29 21:06:06 D:/notetaker/notefiber-BE/internal/repository/implementation/note_embedding_repository_impl.go:39
+[1.220ms] [rows:1] INSERT INTO "note_embeddings" ("document","embedding_value","note_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+2025/12/29 21:06:06 [SUCCESS] Note embedding processed successfully for NoteId: 2a1b5531-bbc7-4e79-b984-5f9d9aaaec75
+2025/12/29 21:06:07 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+
+2025/12/29 21:06:10 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:63
+[0.517ms] [rows:1] SELECT * FROM "users" WHERE id = $1$ AND "users"."deleted_at" IS NULL ORDER BY "users"."id" LIMIT $2$
+
+2025/12/29 21:06:10 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[0.000ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ AND status = $2$
+
+2025/12/29 21:06:10 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.526ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:06:10 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.526ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:06:10 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:84
+[0.513ms] [rows:1] SELECT count(*) FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:06:10 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:82
+[0.000ms] [rows:1] SELECT count(*) FROM "notes" WHERE user_id = $1$ AND "notes"."deleted_at" IS NULL
+2025/12/29 21:06:12 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+
+2025/12/29 21:06:22 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:63
+[1.813ms] [rows:1] SELECT * FROM "users" WHERE id = $1$ AND "users"."deleted_at" IS NULL ORDER BY "users"."id" LIMIT $2$
+
+2025/12/29 21:06:22 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[0.673ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ AND status = $2$
+
+2025/12/29 21:06:22 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.000ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:06:22 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[1.327ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:06:22 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:84
+[0.511ms] [rows:1] SELECT count(*) FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:06:22 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:82
+[0.000ms] [rows:1] SELECT count(*) FROM "notes" WHERE user_id = $1$ AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:06:22 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_session_repository_impl.go:73
+[3.518ms] [rows:5] SELECT * FROM "chat_sessions" WHERE user_id = $1$ AND "chat_sessions"."deleted_at" IS NULL ORDER BY created_at DESC
+
+2025/12/29 21:06:22 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_session_repository_impl.go:61
+[1.513ms] [rows:1] SELECT * FROM "chat_sessions" WHERE id = $1$ AND user_id = $2$ AND "chat_sessions"."deleted_at" IS NULL ORDER BY "chat_sessions"."id" LIMIT $3$
+
+2025/12/29 21:06:22 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_repository_impl.go:88
+[4.198ms] [rows:3] SELECT * FROM "chat_messages" WHERE chat_session_id = $1$ AND "chat_messages"."deleted_at" IS NULL ORDER BY created_at ASC
+2025/12/29 21:06:22 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+
+2025/12/29 21:06:23 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_session_repository_impl.go:38
+[1.071ms] [rows:1] INSERT INTO "chat_sessions" ("user_id","title","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$) RETURNING "id"
+
+2025/12/29 21:06:23 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_repository_impl.go:38
+[1.753ms] [rows:1] INSERT INTO "chat_messages" ("chat","role","chat_session_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+
+2025/12/29 21:06:23 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_raw_repository_impl.go:38
+[4.595ms] [rows:1] INSERT INTO "chat_messages_raw" ("chat","role","chat_session_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+
+2025/12/29 21:06:23 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_raw_repository_impl.go:38
+[1.525ms] [rows:1] INSERT INTO "chat_messages_raw" ("chat","role","chat_session_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+
+2025/12/29 21:06:23 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_session_repository_impl.go:73
+[0.510ms] [rows:6] SELECT * FROM "chat_sessions" WHERE user_id = $1$ AND "chat_sessions"."deleted_at" IS NULL ORDER BY created_at DESC
+
+2025/12/29 21:06:23 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_session_repository_impl.go:61
+[1.164ms] [rows:1] SELECT * FROM "chat_sessions" WHERE id = $1$ AND user_id = $2$ AND "chat_sessions"."deleted_at" IS NULL ORDER BY "chat_sessions"."id" LIMIT $3$
+
+2025/12/29 21:06:23 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_repository_impl.go:88
+[0.513ms] [rows:1] SELECT * FROM "chat_messages" WHERE chat_session_id = $1$ AND "chat_messages"."deleted_at" IS NULL ORDER BY created_at ASC
+2025/12/29 21:06:27 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+
+2025/12/29 21:06:35 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[1.652ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$
+
+2025/12/29 21:06:35 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.581ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:06:35 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[1.609ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:06:35 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:63
+[0.535ms] [rows:1] SELECT * FROM "users" WHERE id = $1$ AND "users"."deleted_at" IS NULL ORDER BY "users"."id" LIMIT $2$
+
+2025/12/29 21:06:35 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_session_repository_impl.go:61
+[0.512ms] [rows:1] SELECT * FROM "chat_sessions" WHERE id = $1$ AND user_id = $2$ AND "chat_sessions"."deleted_at" IS NULL ORDER BY "chat_sessions"."id" LIMIT $3$
+
+2025/12/29 21:06:35 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_raw_repository_impl.go:77
+[3.272ms] [rows:2] SELECT * FROM "chat_messages_raw" WHERE chat_session_id = $1$ AND "chat_messages_raw"."deleted_at" IS NULL ORDER BY created_at ASC
+2025/12/29 21:06:35 [DEBUG] Intent: type=new_query, need_rag=true, reason=First user message in session
+
+2025/12/29 21:06:35 D:/notetaker/notefiber-BE/internal/repository/implementation/note_embedding_repository_impl.go:151
+[12.951ms] [rows:3] SELECT note_embeddings.*, 1 - (embedding_value <=> '[0.033321463,0.031970445,-0.14409685,0.02710144,-0.029471848,-0.034441404,-0.054916404,-0.04822337,0.002271147,-0.014640306,0.04215037,0.04539586,0.038457908,0.018644102,-0.044094626,-0.026216703,-0.00094757613,-0.077857055,0.004758679,0.025129091,0.011851338,-0.016260812,-0.038246278,0.014360599,0.07395651,0.0122460015,-0.024128027,-0.0006284093,-0.017803991,0.06318723,-0.020868845,-0.023440134,-0.02472744,0.050220445,0.018131023,-0.032439273,0.017310504,0.030824471,0.075933866,0.06650505,-0.014064669,-0.019241974,0.03977748,-0.01764119,0.027783254,-0.046560574,0.089920595,0.019243296,0.038961742,-0.05407819,0.0057909824,0.061378837,-0.04499046,-0.08451385,-0.009865608,0.018346682,0.053343117,0.040997453,-0.0043638037,0.047545616,0.045983553,0.06530232,-0.014646834,0.044477664,0.015623255,-0.027699178,-0.016163044,0.10219316,-0.059368625,0.0010826421,0.02257502,-0.030720944,0.034929674,0.033812504,0.014330936,-0.018761728,-0.023502976,-0.059125707,0.052391455,-0.0036093453,0.023121582,0.008359456,0.08621898,-0.030909646,0.009367255,-0.029788593,0.058103886,-0.018052895,0.009151189,0.023020094,0.046834953,-0.03125787,0.01677431,0.04273089,-0.11849152,0.045412622,-0.043475807,0.0010204163,-0.015362423,-0.03947839,0.018010225,-0.04193817,0.03922299,0.0034729994,0.096564665,-0.0242719,0.0075293737,0.022360548,-0.0019933276,0.0054912614,-0.017549051,0.010215943,-0.0047536837,-0.042431466,0.016406858,0.009329999,-0.026047874,-0.08554052,0.039761096,0.041281495,-0.026755905,0.024150401,0.04783952,0.010012285,-0.021759303,-0.003817381,0.013814104,0.0013978031,-0.020666925,-0.053963374,-0.0211898,-0.011192918,-0.018044561,-0.030583614,-0.0019705715,0.03619774,-0.019439835,0.05644315,0.035483222,-0.003093579,-0.0148719605,-0.012599348,0.0156199355,0.01592791,-0.042418253,-0.024569964,0.019502029,-0.039074317,-0.045502547,0.020955268,0.018046567,-0.0005416019,-0.06125057,-0.013671679,-0.013106183,-0.059948377,0.004929569,-0.005518756,-0.012232169,0.018713739,0.03766607,0.035658125,-0.05282016,0.027159095,0.028222363,-0.09793572,-0.0047406107,0.0445085,-0.004664258,0.02377123,-0.050598513,-0.0546845,-0.0311574,-0.009677035,0.016058221,-0.027297517,-0.017938882,-0.040103886,0.06346902,-0.038315833,0.03418777,0.025594475,-0.018871693,0.06685481,-0.047370058,0.009823006,0.008702315,0.045446437,-0.029430857,0.003911986,-0.028276253,0.025205364,-0.055383,-0.068587594,0.0075804875,-0.020593556,0.03454154,0.010976414,-0.026653022,-0.032970276,-0.04691851,-0.048093893,-0.033143103,0.0382201,-0.04864388,0.109495394,0.0062784646,0.03430203,-0.014610129,-0.005140614,0.054715764,-0.030560236,0.0010658544,0.005099017,-0.010929713,-0.028919216,0.0006632416,-0.020852275,0.0024780852,0.030990167,0.003957306,0.056587618,0.008016591,-0.0064764246,0.020788658,0.015538594,0.015168421,-0.014902358,0.032513157,0.06914405,0.0010972312,-0.0115141515,0.0903765,0.0110274665,0.013181089,0.015235451,-0.007528339,0.032363087,-0.007919581,-0.008129142,-0.016093023,-0.009522291,0.03120101,-0.0053164545,0.007833601,0.02361246,-0.00015539459,-0.034078445,0.056194056,-0.028773865,-0.03688992,0.029126769,-0.0057027177,0.04607146,0.0057317414,-0.021260926,-0.03271416,0.02163316,0.024557406,-0.071966305,-0.005056375,-0.028358096,0.034646146,0.010827907,-0.032626472,0.015398328,-0.0046477616,0.0179618,-0.00044900135,-0.032706745,-0.019275004,0.020948276,-0.020281538,0.021315893,-0.00031806124,0.0262715,-0.008389662,0.01960515,-0.041256055,0.005289302,0.021991996,-0.038488984,-0.014315783,-0.0030419657,-0.009863899,0.048611827,0.016340878,0.019069208,0.04807139,0.0036098007,-0.041771106,0.048626255,-0.016576843,0.012795368,-0.017031306,-0.0154052265,0.06805041,-0.004651839,0.021662213,0.009054398,0.04462387,0.03770816,0.031454522,0.0372552,-0.014520179,-0.007816557,0.036172945,-0.01452704,0.00049409433,0.04046645,0.0013700579,-0.0039265715,-0.05348069,0.061982498,-0.100735225,-0.026721234,0.007401992,0.027756779,-0.0025968861,-0.061223414,-0.030184,-0.036784742,0.030212803,-0.040530317,-0.045866214,0.070007086,0.0091983685,0.0844728,0.019292757,-0.0784176,0.012237523,0.011112066,0.0032585873,-0.012498865,0.0016966243,0.020531513,0.013303295,0.00085357897,0.01758382,0.06505943,0.0028243326,-0.0008525328,0.040085975,-0.06075903,-0.037359633,0.0058907107,-0.023080373,-0.033549104,0.040826157,0.046589393,-0.042214036,0.036554705,-0.0663255,0.00926668,0.024665529,-0.05443109,0.02041436,-0.049092427,0.032359324,0.029378425,0.0022058485,-0.008859569,-0.025236165,-0.011925997,-0.0022459421,-0.045537733,-0.009215,-0.026281714,0.0068104486,-0.05059407,0.019132223,-0.0077276314,0.029046137,0.055121817,-0.03728653,-0.028067403,-0.11199863,-0.018618966,0.020063763,-0.044085387,0.0018331028,-0.04654761,0.027215566,0.039450537,-0.0067658704,0.020558828,-0.028005434,-0.042979386,0.036513757,-0.025996694,-0.03207988,-0.042918112,-0.06014136,-0.036057476,-0.007959208,-0.01652511,0.0672592,0.04820191,-0.03040518,0.0404358,-0.002021737,-0.040353145,-0.001258394,-0.06712115,0.04067607,0.031974006,-0.049956292,-0.075960375,-0.00941912,-0.009372349,0.013559979,0.07057324,0.06131004,-0.03782304,0.010413704,-0.06139236,0.031506624,-0.01964646,0.011369785,-0.048995648,-0.011508496,0.033324502,-0.030141983,0.012524429,-0.026512003,0.002984082,0.022239156,0.012720946,-0.042995576,0.029092506,0.011243386,0.015489854,0.020894289,-0.021806264,-0.019613707,0.0016345561,-0.051944733,-0.004426068,0.02724404,0.06816349,0.057535235,0.0067791496,-0.055014435,-0.0019589132,0.04189087,0.018414658,0.09416606,0.02636997,0.03360244,0.022701563,0.028074292,-0.0002632174,0.0013872425,0.038876064,0.016439285,0.03226416,0.016228084,-0.008212112,0.043382116,0.01848851,-0.002106719,0.029257167,0.005205992,0.07600386,-0.04085046,-0.041340332,0.015715674,0.0077202925,0.056321792,0.005949155,-0.0037161417,-0.016176734,0.049944445,0.059549242,0.025844835,-0.005719693,-0.018049983,0.018741041,0.0094813835,0.029534508,0.0009084599,-0.031510137,-0.0522248,-0.039123587,0.0067134295,-0.019736625,0.04847457,-0.022150885,0.020055557,0.0012055557,0.037611254,0.04458323,0.010467209,-0.021971738,0.039526545,-0.0026646166,-0.01980882,0.019006407,0.067944534,-0.044802446,-0.025304724,0.004629229,-0.015695425,-0.004740458,0.048024867,-0.038585253,0.0031392325,-0.082718305,-0.073521286,0.012168585,-0.00008335216,-0.040078256,0.016937537,0.03061598,-0.046401944,-0.046718568,0.034938596,-0.022668546,-0.053664137,0.022254828,0.022465931,-0.07013873,-0.038856808,-0.0071117147,0.050873574,-0.015188637,-0.043421738,-0.0102601,0.07560268,-0.044981718,-0.012776343,-0.037122086,-0.006851523,0.008651534,0.00034786828,-0.028012736,-0.039904296,0.042880695,0.045225438,-0.00485912,-0.011662779,-0.013308599,0.007594087,-0.036606975,-0.0060990145,-0.026690243,0.007924287,-0.018327698,-0.013335508,0.008784332,0.032269754,-0.056415115,-0.0055756303,-0.060509466,0.060466647,-0.03873411,0.016079094,0.013068993,-0.0390938,-0.021496331,-0.008503413,0.034869645,0.063605785,-0.043628264,0.00946472,-0.06142411,-0.0059917998,-0.013905194,0.004831992,0.017477535,-0.036566176,-0.005058757,-0.0022698005,0.033815693,0.017079815,-0.021115532,0.013798907,0.009113885,-0.022211296,-0.025990766,0.02989196,-0.014889171,0.0138648525,0.027715564,-0.032004934,0.03519509,0.04180806,-0.054026864,0.037522156,-0.02111158,0.014167681,-0.006802462,0.051845845,-0.00023256573,0.027524311,0.029472418,-0.004855266,-0.06291069,0.002875555,-0.0667176,-0.013934513,0.032491706,0.0691109,0.0055277767,-0.03836602,0.018142443,-0.027013011,-0.0032374242,-0.038512718,0.020997576,0.032196898,0.010094982,0.08044237,-0.04815541,-0.025968345,-0.06612347,-0.049784403,-0.021686343,-0.022004414,-0.05292561,-0.01582992,-0.037300814,0.03580113,0.010589306,0.028191624,-0.040089898,0.007269656,0.0039080917,0.008920061,0.020863451,0.0048447284,0.026095172,-0.00525134,0.010907127,-0.01876564,-0.0049337465,0.026593119,0.011554395,-0.035743896,0.00632669,0.004414945,0.018941011,-0.025783142,0.037850644,0.01925408,0.008863106,0.067358635,-0.02393711,0.021716835,-0.030525321,0.046222944,0.053085703,0.13769774,-0.04754946,0.0033452916,0.07359223,0.047921047,-0.02816662,0.018775549,-0.023933128,-0.039516773,0.038266532,-0.01332683,0.0081624035,-0.029839568,0.00985642,-0.025274975,0.0062673404,-0.07883083,-0.0066006556,0.057393614,-0.025706707,-0.005584187,-0.03025046,0.030963453,0.07656932,-0.0012887154,0.01894944,0.0285646,0.018196423,0.010954965,0.03868309,0.025466803,-0.0033563373,-0.09128416,-0.04195479,0.026574122,-0.04551047,0.04743325,-0.009321079,-0.045347147,-0.026784033,-0.03138207,-0.0331246,-0.037838202,-0.036664367,-0.028330622,-0.010406864,-0.006900854,0.011970193,0.016136859,0.025071058,0.017335013,-0.00007876529,0.0041665128,-0.059459507,0.00456002,-0.011834879,-0.008010485,0.046544522,0.030362219,-0.006138182,0.03583285,-0.0029745419,0.03920884,0.027506186,-0.045565378,-0.013247365,-0.057899628,0.04304951,0.0332426,-0.009086863,-0.048058935,0.001709897,-0.012270153,-0.07241693,0.007726408,-0.069100305,0.034467723,0.01235887,0.026152864,0.00489919,0.004596376,-0.027115848,-0.028346822,0.043129116,0.013330991,-0.020172508,-0.019941434,0.0018129596,0.00013863378,-0.005212359,-0.00139461,0.0417807,-0.01987041,-0.025644924,-0.0063522556,0.031039074,0.03895477,-0.011418335,0.06493737,-0.054368876,-0.06368054,-0.010858123,-0.07770164,0.0013859113,0.017896432,0.06276914,0.07353401,0.035649084,0.011858681,-0.030342665,0.022883339,-0.008144895,-0.011625277,-0.0056657675,-0.037419017,0.003892369]') as similarity FROM "note_embeddings" JOIN notes ON notes.id = note_embeddings.note_id WHERE notes.user_id = 'd09dacfa-af1f-40f8-8184-00310986ac6f' AND 1 - (embedding_value <=> '[0.033321463,0.031970445,-0.14409685,0.02710144,-0.029471848,-0.034441404,-0.054916404,-0.04822337,0.002271147,-0.014640306,0.04215037,0.04539586,0.038457908,0.018644102,-0.044094626,-0.026216703,-0.00094757613,-0.077857055,0.004758679,0.025129091,0.011851338,-0.016260812,-0.038246278,0.014360599,0.07395651,0.0122460015,-0.024128027,-0.0006284093,-0.017803991,0.06318723,-0.020868845,-0.023440134,-0.02472744,0.050220445,0.018131023,-0.032439273,0.017310504,0.030824471,0.075933866,0.06650505,-0.014064669,-0.019241974,0.03977748,-0.01764119,0.027783254,-0.046560574,0.089920595,0.019243296,0.038961742,-0.05407819,0.0057909824,0.061378837,-0.04499046,-0.08451385,-0.009865608,0.018346682,0.053343117,0.040997453,-0.0043638037,0.047545616,0.045983553,0.06530232,-0.014646834,0.044477664,0.015623255,-0.027699178,-0.016163044,0.10219316,-0.059368625,0.0010826421,0.02257502,-0.030720944,0.034929674,0.033812504,0.014330936,-0.018761728,-0.023502976,-0.059125707,0.052391455,-0.0036093453,0.023121582,0.008359456,0.08621898,-0.030909646,0.009367255,-0.029788593,0.058103886,-0.018052895,0.009151189,0.023020094,0.046834953,-0.03125787,0.01677431,0.04273089,-0.11849152,0.045412622,-0.043475807,0.0010204163,-0.015362423,-0.03947839,0.018010225,-0.04193817,0.03922299,0.0034729994,0.096564665,-0.0242719,0.0075293737,0.022360548,-0.0019933276,0.0054912614,-0.017549051,0.010215943,-0.0047536837,-0.042431466,0.016406858,0.009329999,-0.026047874,-0.08554052,0.039761096,0.041281495,-0.026755905,0.024150401,0.04783952,0.010012285,-0.021759303,-0.003817381,0.013814104,0.0013978031,-0.020666925,-0.053963374,-0.0211898,-0.011192918,-0.018044561,-0.030583614,-0.0019705715,0.03619774,-0.019439835,0.05644315,0.035483222,-0.003093579,-0.0148719605,-0.012599348,0.0156199355,0.01592791,-0.042418253,-0.024569964,0.019502029,-0.039074317,-0.045502547,0.020955268,0.018046567,-0.0005416019,-0.06125057,-0.013671679,-0.013106183,-0.059948377,0.004929569,-0.005518756,-0.012232169,0.018713739,0.03766607,0.035658125,-0.05282016,0.027159095,0.028222363,-0.09793572,-0.0047406107,0.0445085,-0.004664258,0.02377123,-0.050598513,-0.0546845,-0.0311574,-0.009677035,0.016058221,-0.027297517,-0.017938882,-0.040103886,0.06346902,-0.038315833,0.03418777,0.025594475,-0.018871693,0.06685481,-0.047370058,0.009823006,0.008702315,0.045446437,-0.029430857,0.003911986,-0.028276253,0.025205364,-0.055383,-0.068587594,0.0075804875,-0.020593556,0.03454154,0.010976414,-0.026653022,-0.032970276,-0.04691851,-0.048093893,-0.033143103,0.0382201,-0.04864388,0.109495394,0.0062784646,0.03430203,-0.014610129,-0.005140614,0.054715764,-0.030560236,0.0010658544,0.005099017,-0.010929713,-0.028919216,0.0006632416,-0.020852275,0.0024780852,0.030990167,0.003957306,0.056587618,0.008016591,-0.0064764246,0.020788658,0.015538594,0.015168421,-0.014902358,0.032513157,0.06914405,0.0010972312,-0.0115141515,0.0903765,0.0110274665,0.013181089,0.015235451,-0.007528339,0.032363087,-0.007919581,-0.008129142,-0.016093023,-0.009522291,0.03120101,-0.0053164545,0.007833601,0.02361246,-0.00015539459,-0.034078445,0.056194056,-0.028773865,-0.03688992,0.029126769,-0.0057027177,0.04607146,0.0057317414,-0.021260926,-0.03271416,0.02163316,0.024557406,-0.071966305,-0.005056375,-0.028358096,0.034646146,0.010827907,-0.032626472,0.015398328,-0.0046477616,0.0179618,-0.00044900135,-0.032706745,-0.019275004,0.020948276,-0.020281538,0.021315893,-0.00031806124,0.0262715,-0.008389662,0.01960515,-0.041256055,0.005289302,0.021991996,-0.038488984,-0.014315783,-0.0030419657,-0.009863899,0.048611827,0.016340878,0.019069208,0.04807139,0.0036098007,-0.041771106,0.048626255,-0.016576843,0.012795368,-0.017031306,-0.0154052265,0.06805041,-0.004651839,0.021662213,0.009054398,0.04462387,0.03770816,0.031454522,0.0372552,-0.014520179,-0.007816557,0.036172945,-0.01452704,0.00049409433,0.04046645,0.0013700579,-0.0039265715,-0.05348069,0.061982498,-0.100735225,-0.026721234,0.007401992,0.027756779,-0.0025968861,-0.061223414,-0.030184,-0.036784742,0.030212803,-0.040530317,-0.045866214,0.070007086,0.0091983685,0.0844728,0.019292757,-0.0784176,0.012237523,0.011112066,0.0032585873,-0.012498865,0.0016966243,0.020531513,0.013303295,0.00085357897,0.01758382,0.06505943,0.0028243326,-0.0008525328,0.040085975,-0.06075903,-0.037359633,0.0058907107,-0.023080373,-0.033549104,0.040826157,0.046589393,-0.042214036,0.036554705,-0.0663255,0.00926668,0.024665529,-0.05443109,0.02041436,-0.049092427,0.032359324,0.029378425,0.0022058485,-0.008859569,-0.025236165,-0.011925997,-0.0022459421,-0.045537733,-0.009215,-0.026281714,0.0068104486,-0.05059407,0.019132223,-0.0077276314,0.029046137,0.055121817,-0.03728653,-0.028067403,-0.11199863,-0.018618966,0.020063763,-0.044085387,0.0018331028,-0.04654761,0.027215566,0.039450537,-0.0067658704,0.020558828,-0.028005434,-0.042979386,0.036513757,-0.025996694,-0.03207988,-0.042918112,-0.06014136,-0.036057476,-0.007959208,-0.01652511,0.0672592,0.04820191,-0.03040518,0.0404358,-0.002021737,-0.040353145,-0.001258394,-0.06712115,0.04067607,0.031974006,-0.049956292,-0.075960375,-0.00941912,-0.009372349,0.013559979,0.07057324,0.06131004,-0.03782304,0.010413704,-0.06139236,0.031506624,-0.01964646,0.011369785,-0.048995648,-0.011508496,0.033324502,-0.030141983,0.012524429,-0.026512003,0.002984082,0.022239156,0.012720946,-0.042995576,0.029092506,0.011243386,0.015489854,0.020894289,-0.021806264,-0.019613707,0.0016345561,-0.051944733,-0.004426068,0.02724404,0.06816349,0.057535235,0.0067791496,-0.055014435,-0.0019589132,0.04189087,0.018414658,0.09416606,0.02636997,0.03360244,0.022701563,0.028074292,-0.0002632174,0.0013872425,0.038876064,0.016439285,0.03226416,0.016228084,-0.008212112,0.043382116,0.01848851,-0.002106719,0.029257167,0.005205992,0.07600386,-0.04085046,-0.041340332,0.015715674,0.0077202925,0.056321792,0.005949155,-0.0037161417,-0.016176734,0.049944445,0.059549242,0.025844835,-0.005719693,-0.018049983,0.018741041,0.0094813835,0.029534508,0.0009084599,-0.031510137,-0.0522248,-0.039123587,0.0067134295,-0.019736625,0.04847457,-0.022150885,0.020055557,0.0012055557,0.037611254,0.04458323,0.010467209,-0.021971738,0.039526545,-0.0026646166,-0.01980882,0.019006407,0.067944534,-0.044802446,-0.025304724,0.004629229,-0.015695425,-0.004740458,0.048024867,-0.038585253,0.0031392325,-0.082718305,-0.073521286,0.012168585,-0.00008335216,-0.040078256,0.016937537,0.03061598,-0.046401944,-0.046718568,0.034938596,-0.022668546,-0.053664137,0.022254828,0.022465931,-0.07013873,-0.038856808,-0.0071117147,0.050873574,-0.015188637,-0.043421738,-0.0102601,0.07560268,-0.044981718,-0.012776343,-0.037122086,-0.006851523,0.008651534,0.00034786828,-0.028012736,-0.039904296,0.042880695,0.045225438,-0.00485912,-0.011662779,-0.013308599,0.007594087,-0.036606975,-0.0060990145,-0.026690243,0.007924287,-0.018327698,-0.013335508,0.008784332,0.032269754,-0.056415115,-0.0055756303,-0.060509466,0.060466647,-0.03873411,0.016079094,0.013068993,-0.0390938,-0.021496331,-0.008503413,0.034869645,0.063605785,-0.043628264,0.00946472,-0.06142411,-0.0059917998,-0.013905194,0.004831992,0.017477535,-0.036566176,-0.005058757,-0.0022698005,0.033815693,0.017079815,-0.021115532,0.013798907,0.009113885,-0.022211296,-0.025990766,0.02989196,-0.014889171,0.0138648525,0.027715564,-0.032004934,0.03519509,0.04180806,-0.054026864,0.037522156,-0.02111158,0.014167681,-0.006802462,0.051845845,-0.00023256573,0.027524311,0.029472418,-0.004855266,-0.06291069,0.002875555,-0.0667176,-0.013934513,0.032491706,0.0691109,0.0055277767,-0.03836602,0.018142443,-0.027013011,-0.0032374242,-0.038512718,0.020997576,0.032196898,0.010094982,0.08044237,-0.04815541,-0.025968345,-0.06612347,-0.049784403,-0.021686343,-0.022004414,-0.05292561,-0.01582992,-0.037300814,0.03580113,0.010589306,0.028191624,-0.040089898,0.007269656,0.0039080917,0.008920061,0.020863451,0.0048447284,0.026095172,-0.00525134,0.010907127,-0.01876564,-0.0049337465,0.026593119,0.011554395,-0.035743896,0.00632669,0.004414945,0.018941011,-0.025783142,0.037850644,0.01925408,0.008863106,0.067358635,-0.02393711,0.021716835,-0.030525321,0.046222944,0.053085703,0.13769774,-0.04754946,0.0033452916,0.07359223,0.047921047,-0.02816662,0.018775549,-0.023933128,-0.039516773,0.038266532,-0.01332683,0.0081624035,-0.029839568,0.00985642,-0.025274975,0.0062673404,-0.07883083,-0.0066006556,0.057393614,-0.025706707,-0.005584187,-0.03025046,0.030963453,0.07656932,-0.0012887154,0.01894944,0.0285646,0.018196423,0.010954965,0.03868309,0.025466803,-0.0033563373,-0.09128416,-0.04195479,0.026574122,-0.04551047,0.04743325,-0.009321079,-0.045347147,-0.026784033,-0.03138207,-0.0331246,-0.037838202,-0.036664367,-0.028330622,-0.010406864,-0.006900854,0.011970193,0.016136859,0.025071058,0.017335013,-0.00007876529,0.0041665128,-0.059459507,0.00456002,-0.011834879,-0.008010485,0.046544522,0.030362219,-0.006138182,0.03583285,-0.0029745419,0.03920884,0.027506186,-0.045565378,-0.013247365,-0.057899628,0.04304951,0.0332426,-0.009086863,-0.048058935,0.001709897,-0.012270153,-0.07241693,0.007726408,-0.069100305,0.034467723,0.01235887,0.026152864,0.00489919,0.004596376,-0.027115848,-0.028346822,0.043129116,0.013330991,-0.020172508,-0.019941434,0.0018129596,0.00013863378,-0.005212359,-0.00139461,0.0417807,-0.01987041,-0.025644924,-0.0063522556,0.031039074,0.03895477,-0.011418335,0.06493737,-0.054368876,-0.06368054,-0.010858123,-0.07770164,0.0013859113,0.017896432,0.06276914,0.07353401,0.035649084,0.011858681,-0.030342665,0.022883339,-0.008144895,-0.011625277,-0.0056657675,-0.037419017,0.003892369]') >= 0.4 ORDER BY similarity DESC LIMIT 5
+2025/12/29 21:06:35 [DEBUG] RAG Result 1: NoteID=2a1b5531-bbc7-4e79-b984-5f9d9aaaec75, Similarity=0.70
+2025/12/29 21:06:35 [DEBUG] RAG Result 2: NoteID=2a1b5531-bbc7-4e79-b984-5f9d9aaaec75, Similarity=0.69
+2025/12/29 21:06:35 [DEBUG] RAG Result 3: NoteID=2a1b5531-bbc7-4e79-b984-5f9d9aaaec75, Similarity=0.59
+
+2025/12/29 21:06:35 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[1.153ms] [rows:1] SELECT * FROM "notes" WHERE id IN ($1$,$2$,$3$) AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:06:52 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:63
+[210.826ms] [rows:1] SELECT * FROM "users" WHERE id = $1$ AND "users"."deleted_at" IS NULL ORDER BY "users"."id" LIMIT $2$
+
+2025/12/29 21:06:52 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[8.064ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ AND status = $2$
+
+2025/12/29 21:06:52 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[5.965ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:06:52 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[14.213ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+
+2025/12/29 21:06:52 D:/notetaker/notefiber-BE/internal/repository/implementation/notebook_repository_impl.go:84
+[7.010ms] [rows:1] SELECT count(*) FROM "notebooks" WHERE user_id = $1$ AND "notebooks"."deleted_at" IS NULL
+
+2025/12/29 21:06:52 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:82
+[5.752ms] [rows:1] SELECT count(*) FROM "notes" WHERE user_id = $1$ AND "notes"."deleted_at" IS NULL
+2025/12/29 21:06:52 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.
+2025/12/29 21:07:00 [DEBUG] Citation parsing - found 3 matches in reply
+2025/12/29 21:07:00 [DEBUG] Found citation: Reference 1
+2025/12/29 21:07:00 [DEBUG] Found citation: Reference 2
+2025/12/29 21:07:00 [DEBUG] Found citation: Reference 1
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/note_repository_impl.go:73
+[1.228ms] [rows:1] SELECT * FROM "notes" WHERE id IN ($1$,$2$) AND "notes"."deleted_at" IS NULL
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_repository_impl.go:38
+[1.119ms] [rows:1] INSERT INTO "chat_messages" ("chat","role","chat_session_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_repository_impl.go:38
+[1.063ms] [rows:1] INSERT INTO "chat_messages" ("chat","role","chat_session_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_repository_impl.go:70
+[7.963ms] [rows:2] INSERT INTO "chat_citations" ("id","chat_message_id","note_id","created_at") VALUES ($1$,$2$,$3$,$4$),($5$,$6$,$7$,$8$)
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_raw_repository_impl.go:38
+[2.635ms] [rows:1] INSERT INTO "chat_messages_raw" ("chat","role","chat_session_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_message_raw_repository_impl.go:38
+[1.050ms] [rows:1] INSERT INTO "chat_messages_raw" ("chat","role","chat_session_id","created_at","updated_at","deleted_at","id") VALUES ($1$,$2$,$3$,$4$,$5$,$6$,$7$) RETURNING "id"
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/chat_session_repository_impl.go:47
+[1.609ms] [rows:1] UPDATE "chat_sessions" SET "user_id"=$1$,"title"=$2$,"created_at"=$3$,"updated_at"=$4$,"deleted_at"=$5$ WHERE "chat_sessions"."deleted_at" IS NULL AND "id" = $6$
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/user_repository_impl.go:48
+[17.483ms] [rows:1] UPDATE "users" SET "email"=$1$,"password_hash"=$2$,"full_name"=$3$,"role"=$4$,"status"=$5$,"email_verified"=$6$,"email_verified_at"=$7$,"avatar_url"=$8$,"ai_daily_usage"=$9$,"ai_daily_usage_last_reset"=$10$,"created_at"=$11$,"updated_at"=$12$,"deleted_at"=$13$ WHERE "users"."deleted_at" IS NULL AND "id" = $14$
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:128
+[1.142ms] [rows:3] SELECT * FROM "user_subscriptions" WHERE user_id = $1$ ORDER BY created_at DESC
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.000ms] [rows:0] SELECT * FROM "subscription_plan_features" WHERE "subscription_plan_features"."plan_id" = $1$
+
+2025/12/29 21:07:00 D:/notetaker/notefiber-BE/internal/repository/implementation/subscription_repository_impl.go:65
+[0.574ms] [rows:1] SELECT * FROM "subscription_plans" WHERE id = $1$ ORDER BY "subscription_plans"."id" LIMIT $2$
+2025/12/29 21:07:02 traces export: Post "http://localhost:4318/v1/traces": dial tcp [::1]:4318: connectex: No connection could be made because the target machine actively refused it.

@@ -1,0 +1,287 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **Admin Billing Management Flow**\nAdmin-Specific Billing & Subscription Operations
+header Admin Billing Management Sequence
+footer Page 1 of 1
+
+actor "Admin Client" as Client
+boundary "Server" as Server
+control "Admin Controller" as Controller
+control "Admin Service" as Service
+control "Plan Service" as PlanService
+entity "Plan Repository" as PlanRepo
+entity "Feature Repository" as FeatureRepo
+entity "Subscription Repository" as SubRepo
+entity "Refund Repository" as RefundRepo
+control "Logger" as Logger
+database "Database" as DB
+
+autonumber "<b>[000]"
+
+== PLAN CRUD ==
+
+Client -[#CC3300]> Server : HTTP POST/PUT/DELETE /api/admin/plans
+activate Client
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> Controller : Parse Request
+activate Controller
+
+Controller -> Controller : Extract Data & Method
+Controller -[#CC3300]> PlanService : Create/Update/Delete Plan
+activate PlanService
+
+PlanService -[#CC3300]> PlanRepo : CRUD Operations
+activate PlanRepo
+
+alt POST / Create
+    PlanRepo -[#CC3300]> DB : INSERT INTO plans
+    activate DB
+    DB -[#006600]-> PlanRepo : Plan ID
+    deactivate DB
+else PUT / Update
+    PlanRepo -[#CC3300]> DB : UPDATE plans SET ...
+    activate DB
+    DB -[#006600]-> PlanRepo : Update Success
+    deactivate DB
+else DELETE / Delete
+    PlanRepo -[#CC3300]> DB : DELETE FROM plans WHERE id=?
+    activate DB
+    DB -[#006600]-> PlanRepo : Delete Success
+    deactivate DB
+end
+
+PlanRepo -[#006600]-> PlanService : Operation Result
+deactivate PlanRepo
+
+PlanService -[#006600]> Controller : Plan Data or Success
+deactivate PlanService
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK / 201 Created
+deactivate Server
+deactivate Client
+
+== FEATURE CATALOG CRUD ==
+
+Client -[#CC3300]> Server : HTTP POST/PUT/DELETE /api/admin/features
+activate Client
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> Controller : Parse Request
+activate Controller
+
+Controller -> Controller : Extract Feature Data
+Controller -[#CC3300]> Service : CRUD Feature in Master Catalog
+activate Service
+
+Service -[#CC3300]> FeatureRepo : Feature CRUD
+activate FeatureRepo
+
+alt POST / Create
+    FeatureRepo -[#CC3300]> DB : INSERT INTO features
+    activate DB
+    DB -[#006600]-> FeatureRepo : Feature ID
+    deactivate DB
+else PUT / Update
+    FeatureRepo -[#CC3300]> DB : UPDATE features SET ...
+    activate DB
+    DB -[#006600]-> FeatureRepo : Update Success
+    deactivate DB
+else DELETE / Delete
+    FeatureRepo -[#CC3300]> DB : DELETE FROM features WHERE key=?
+    activate DB
+    DB -[#006600]-> FeatureRepo : Delete Success
+    deactivate DB
+end
+
+FeatureRepo -[#006600]-> Service : Feature Entity
+deactivate FeatureRepo
+
+Service -[#006600]> Controller : Feature Data
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK / 201 Created
+deactivate Server
+deactivate Client
+
+== PLAN-FEATURE ASSIGNMENT ==
+
+Client -[#CC3300]> Server : HTTP POST /api/admin/plans/:id/features\n{feature_key}
+activate Client
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> Controller : Parse Plan ID + Feature Key
+activate Controller
+
+Controller -> Controller : Validate Input
+Controller -[#CC3300]> Service : CreatePlanFeature
+activate Service
+
+Service -[#CC3300]> PlanRepo : Find Plan
+activate PlanRepo
+PlanRepo -[#CC3300]> DB : SELECT * FROM plans WHERE id=?
+activate DB
+DB -[#006600]-> PlanRepo : Plan Data
+deactivate DB
+PlanRepo -[#006600]-> Service : Plan Entity
+deactivate PlanRepo
+
+Service -[#CC3300]> FeatureRepo : Find Feature by Key
+activate FeatureRepo
+FeatureRepo -[#CC3300]> DB : SELECT * FROM features WHERE key=?
+activate DB
+DB -[#006600]-> FeatureRepo : Feature Data
+deactivate DB
+FeatureRepo -[#006600]-> Service : Feature Entity
+deactivate FeatureRepo
+
+Service -[#CC3300]> PlanRepo : AddFeatureToPlan (many-to-many)
+activate PlanRepo
+PlanRepo -[#CC3300]> DB : INSERT INTO plan_features (plan_id, feature_id)
+activate DB
+DB -[#006600]-> PlanRepo : Assignment Created
+deactivate DB
+PlanRepo -[#006600]-> Service : Assignment Success
+deactivate PlanRepo
+
+Service -[#006600]> Controller : Assignment Result
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, message: "Feature added to plan"}
+deactivate Server
+deactivate Client
+
+== UPGRADE SUBSCRIPTION ==
+
+Client -[#CC3300]> Server : HTTP POST /api/admin/subscriptions/upgrade\n{user_id, new_plan_id}
+activate Client
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> Controller : Parse Request
+activate Controller
+
+Controller -> Controller : Validate Upgrade Request
+Controller -[#CC3300]> Service : UpgradeSubscription
+activate Service
+
+Service -> Service : Transaction Begin
+Service -> Service : Calculate Proration Credit
+Service -[#CC3300]> SubRepo : Cancel Old Subscription
+activate SubRepo
+SubRepo -[#CC3300]> DB : UPDATE subscriptions SET status='cancelled'\nWHERE user_id=? AND status='active'
+activate DB
+DB -[#006600]-> SubRepo : Old Subscription Cancelled
+deactivate DB
+SubRepo -[#006600]-> Service : Cancellation Success
+deactivate SubRepo
+
+Service -[#CC3300]> SubRepo : Create New Subscription (Active)
+activate SubRepo
+SubRepo -[#CC3300]> DB : INSERT INTO subscriptions (status='active')
+activate DB
+DB -[#006600]-> SubRepo : New Subscription ID
+deactivate DB
+SubRepo -[#006600]-> Service : New Subscription Created
+deactivate SubRepo
+
+Service -[#CC6600]> Logger : Audit\n{action: "upgrade_subscription", admin_id, user_id, old_plan, new_plan}
+activate Logger
+Logger -> Logger : Write to Audit Log
+Logger -[#006600]-> Service : Log Recorded
+deactivate Logger
+
+Service -> Service : Transaction Commit
+Service -> Service : Calculate Amount Due (after credit)
+Service -[#006600]> Controller : Credit & Amount Due
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Credit & Amount Due
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {\n  credit_applied: ...,\n  amount_due: ...,\n  new_subscription_id: ...\n}}
+deactivate Server
+deactivate Client
+
+== APPROVE REFUND REQUEST ==
+
+Client -[#CC3300]> Server : HTTP POST /api/admin/refunds/:id/approve
+activate Client
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> Controller : Parse Refund ID
+activate Controller
+
+Controller -> Controller : Extract Refund ID
+Controller -[#CC3300]> Service : ApproveRefund
+activate Service
+
+Service -> Service : Transaction Begin
+Service -[#CC3300]> RefundRepo : Update Refund Status  Approved
+activate RefundRepo
+RefundRepo -[#CC3300]> DB : UPDATE refunds SET status='approved', approved_at=NOW()\nWHERE id=?
+activate DB
+DB -[#006600]-> RefundRepo : Refund Approved
+deactivate DB
+RefundRepo -[#006600]-> Service : Refund Updated
+deactivate RefundRepo
+
+Service -[#CC3300]> SubRepo : Cancel Subscription + Set Refunded
+activate SubRepo
+SubRepo -[#CC3300]> DB : UPDATE subscriptions SET status='refunded'\nWHERE id=(SELECT subscription_id FROM refunds WHERE id=?)
+activate DB
+DB -[#006600]-> SubRepo : Subscription Updated
+deactivate DB
+SubRepo -[#006600]-> Service : Subscription Marked Refunded
+deactivate SubRepo
+
+Service -[#CC6600]> Logger : Audit\n{action: "approve_refund", admin_id, refund_id, amount}
+activate Logger
+Logger -> Logger : Write to Audit Log
+Logger -[#006600]-> Service : Log Recorded
+deactivate Logger
+
+Service -> Service : Transaction Commit
+Service -[#006600]> Controller : Approval Success
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, message: "Refund approved"}
+deactivate Server
+deactivate Client
+
+@enduml

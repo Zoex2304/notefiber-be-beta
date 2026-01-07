@@ -1,0 +1,227 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **Plan Limits & Usage Tracking Flow**\nPlan Limits Management and Usage Enforcement
+header Plan Limits Management Sequence
+footer Page 1 of 1
+
+actor "Admin Client" as AdminClient
+actor "User Client" as UserClient
+boundary "Server" as Server
+control "Plan Controller" as PlanCtrl
+control "Plan Service" as PlanService
+control "Note Service" as NoteService
+control "Notebook Service" as NotebookService
+control "Chat Service" as ChatService
+entity "Plan Repository" as PlanRepo
+entity "User Repository" as UserRepo
+entity "Subscription Repository" as SubRepo
+database "Database" as DB
+
+autonumber "<b>[000]"
+
+== CREATE PLAN WITH LIMITS ==
+
+AdminClient -[#CC3300]> Server : HTTP POST /api/admin/plans\n{name, price, features: [{key, value}]}
+activate AdminClient
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> PlanCtrl : Parse Request with PlanFeaturesDTO
+activate PlanCtrl
+
+PlanCtrl -> PlanCtrl : Validate Input
+PlanCtrl -[#CC3300]> PlanService : CreatePlan
+activate PlanService
+
+PlanService -> PlanService : Map: DTO Features -> Entity Limits
+PlanService -> PlanService : Build Plan Entity with Limits
+PlanService -[#CC3300]> PlanRepo : CreatePlan
+activate PlanRepo
+PlanRepo -[#CC3300]> DB : INSERT INTO plans (..., notebook_limit, note_limit, ai_chat_daily_limit)
+activate DB
+DB -[#006600]-> PlanRepo : Plan ID
+deactivate DB
+PlanRepo -[#006600]-> PlanService : Created Plan
+deactivate PlanRepo
+
+PlanService -> PlanService : Transform to Response DTO
+PlanService -[#006600]> PlanCtrl : Plan + Features
+deactivate PlanService
+
+PlanCtrl -> PlanCtrl : Format Response
+PlanCtrl -[#006600]> Server : HTTP Response dengan Plan + Features
+deactivate PlanCtrl
+
+Server -[#006600]> AdminClient : 201 Created\n{\n  success: true,\n  data: {\n    plan: {...},\n    features: [...],\n    limits: {notebook: 10, note: 100, ai_chat: 50}\n  }\n}
+deactivate Server
+deactivate AdminClient
+
+== UPDATE PLAN LIMITS ==
+
+AdminClient -[#CC3300]> Server : HTTP PUT /api/admin/plans/:id\n{features: [{key: "notebook_limit", value: 20}]}
+activate AdminClient
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> PlanCtrl : Parse Request
+activate PlanCtrl
+
+PlanCtrl -> PlanCtrl : Validate Update Data
+PlanCtrl -[#CC3300]> PlanService : UpdatePlan
+activate PlanService
+
+PlanService -[#CC3300]> PlanRepo : FindOnePlan
+activate PlanRepo
+PlanRepo -[#CC3300]> DB : SELECT * FROM plans WHERE id=?
+activate DB
+DB -[#006600]-> PlanRepo : Plan Data
+deactivate DB
+PlanRepo -[#006600]-> PlanService : Plan Entity
+deactivate PlanRepo
+
+PlanService -> PlanService : Update: Limit fields from Request.Features
+PlanService -[#CC3300]> PlanRepo : UpdatePlan
+activate PlanRepo
+PlanRepo -[#CC3300]> DB : UPDATE plans SET notebook_limit=20 WHERE id=?
+activate DB
+DB -[#006600]-> PlanRepo : Update Success
+deactivate DB
+PlanRepo -[#006600]-> PlanService : Updated Plan
+deactivate PlanRepo
+
+PlanService -[#006600]> PlanCtrl : Updated Plan
+deactivate PlanService
+
+PlanCtrl -> PlanCtrl : Format Response
+PlanCtrl -[#006600]> Server : HTTP Response dengan Updated Plan
+deactivate PlanCtrl
+
+Server -[#006600]> AdminClient : 200 OK\n{\n  success: true,\n  data: {\n    plan: {...},\n    updated_limits: {notebook_limit: 20}\n  }\n}
+deactivate Server
+deactivate AdminClient
+
+== LIMIT ENFORCEMENT (User Side) ==
+
+UserClient -[#CC3300]> Server : HTTP POST /api/notebook/v1
+activate UserClient
+activate Server
+
+Server -[#CC3300]> NotebookService : Create Notebook
+activate NotebookService
+
+NotebookService -[#CC6600]> PlanService : Call PlanService.CheckCanCreateNotebook(user_id)
+activate PlanService
+
+PlanService -[#CC3300]> SubRepo : Get User's Active Plan
+activate SubRepo
+SubRepo -[#CC3300]> DB : SELECT p.* FROM subscriptions s\nJOIN plans p ON s.plan_id = p.id\nWHERE s.user_id=? AND s.status='active'\nAND s.expires_at > NOW()
+activate DB
+DB -[#006600]-> SubRepo : Active Plan Details
+deactivate DB
+SubRepo -[#006600]-> PlanService : Plan with Limits
+deactivate SubRepo
+
+PlanService -[#CC3300]> NotebookService : Get Current Notebook Count
+activate NotebookService
+NotebookService -[#CC3300]> DB : SELECT COUNT(*) FROM notebooks WHERE user_id=?
+activate DB
+DB -[#006600]-> NotebookService : Current Count
+deactivate DB
+NotebookService -[#006600]-> PlanService : Notebook Count
+deactivate NotebookService
+
+PlanService -> PlanService : Compare Usage vs Limit
+alt Count >= Limit
+    PlanService -> PlanService : Return LimitExceededError
+    PlanService -[#990000]> NotebookService : Limit Exceeded
+else Count < Limit
+    PlanService -> PlanService : Return Allow
+    PlanService -[#006600]> NotebookService : Allow Creation
+end
+deactivate PlanService
+
+alt Allow Creation
+    NotebookService -> NotebookService : Proceed with Notebook Creation
+    NotebookService -[#006600]> Server : Notebook Created
+else Limit Exceeded
+    NotebookService -> NotebookService : Throw 403 Forbidden
+    NotebookService -[#990000]> Server : 403 Limit Exceeded
+end
+deactivate NotebookService
+
+Server -[#006600]> UserClient : 201 Created / 403 Forbidden
+deactivate Server
+deactivate UserClient
+
+== AI USAGE TRACKING ==
+
+UserClient -[#CC3300]> Server : HTTP POST /api/chatbot/chat
+activate UserClient
+activate Server
+
+Server -[#CC3300]> ChatService : Use AI Chat
+activate ChatService
+
+ChatService -> ChatService : Check Daily Reset\nif AiDailyUsageLastReset < Today
+ChatService -> ChatService : Increment user.AiDailyUsage
+ChatService -[#CC3300]> UserRepo : UpdateUserAiUsage
+activate UserRepo
+UserRepo -[#CC3300]> DB : UPDATE users SET ai_daily_usage = ai_daily_usage + 1,\nai_daily_usage_last_reset = CASE WHEN ... THEN NOW() ELSE ai_daily_usage_last_reset END\nWHERE id=?
+activate DB
+DB -[#006600]-> UserRepo : Usage Updated
+deactivate DB
+UserRepo -[#006600]-> ChatService : Update Success
+deactivate UserRepo
+
+ChatService -[#CC6600]> PlanService : Check Usage vs plan.AiChatDailyLimit
+activate PlanService
+PlanService -[#CC3300]> SubRepo : Get User's AI Limit
+activate SubRepo
+SubRepo -[#CC3300]> DB : SELECT p.ai_chat_daily_limit FROM plans p\nJOIN subscriptions s ON p.id = s.plan_id\nWHERE s.user_id=? AND s.status='active'
+activate DB
+DB -[#006600]-> SubRepo : AI Daily Limit
+deactivate DB
+SubRepo -[#006600]> PlanService : Limit Value
+deactivate SubRepo
+PlanService -[#006600]> ChatService : AI Limit
+deactivate PlanService
+
+ChatService -[#CC3300]> UserRepo : Get Current AI Usage
+activate UserRepo
+UserRepo -[#CC3300]> DB : SELECT ai_daily_usage FROM users WHERE id=?
+activate DB
+DB -[#006600]-> UserRepo : Current Usage
+deactivate DB
+UserRepo -[#006600]> ChatService : Usage Count
+deactivate UserRepo
+
+ChatService -> ChatService : Compare Usage vs Limit
+alt Usage >= Limit
+    ChatService -> ChatService : Return Error
+    ChatService -[#990000]> Server : 429 Too Many Requests
+else Usage < Limit
+    ChatService -> ChatService : Proceed with AI Processing
+    ChatService -[#006600]> Server : AI Response
+end
+deactivate ChatService
+
+Server -[#006600]> UserClient : 200 OK / 429 Rate Limited
+deactivate Server
+deactivate UserClient
+
+note over Server, DB : Daily Reset: Midnight via AiDailyUsageLastReset
+note over Server, DB : Reset Logic: WHEN ai_daily_usage_last_reset < CURRENT_DATE THEN NOW()
+
+@enduml
+

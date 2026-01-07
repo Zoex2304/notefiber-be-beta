@@ -1,0 +1,1070 @@
+# Dokumentasi: Backend Admin Panel Management (Full Trace)
+
+**Tanggal Dokumentasi:** 27 Desember 2024  
+**Fokus Domain:** Backend (Admin Dashboard & Management API)  
+**Sumber Kebenaran:** Laporan Implementasi Fitur Admin Panel
+
+---
+
+## A. Pengantar Fitur Admin Panel Backend
+
+Fitur ini menyediakan serangkaian endpoint API untuk pengelolaan sistem secara menyeluruh oleh administrator. Admin Panel mencakup dashboard statistik, manajemen pengguna, manajemen subscription plan, pemrosesan transaksi, monitoring log sistem, pengelolaan refund request, dan konfigurasi feature catalog.
+
+Secara operasional, semua endpoint admin dilindungi oleh admin middleware yang memvalidasi bahwa request berasal dari user dengan role admin. Middleware ini memeriksa JWT token dan memastikan claim role bernilai "admin" sebelum meneruskan request ke handler.
+
+Admin Panel dibagi menjadi delapan modul fungsional utama yaitu Dashboard Analytics, User Management, Transaction Management, Log Monitoring, Subscription Management, Plan Management, Feature Catalog Management, dan Refund Management. Setiap modul memiliki endpoint tersendiri dengan operasi CRUD yang sesuai.
+
+---
+
+## B. Alur Data End-to-End
+
+### B.1 Route Protection Pattern
+
+Semua request ke endpoint admin melewati sekuensial validasi middleware sebelum mencapai handler. Pattern ini memastikan hanya admin yang ter-autentikasi yang dapat mengakses fitur manajemen.
+
+```
+HTTP Request ke /api/admin/*
+    -> Fiber Router
+    -> Admin Group Middleware
+        -> Parse Authorization Header
+        -> Extract Bearer Token
+        -> Parse JWT Claims
+        -> Validate Role == "admin"
+        -> 403 jika bukan admin
+    -> Handler (jika role valid)
+    -> Service Layer
+    -> Repository Layer
+    -> Database
+    -> Response
+```
+
+*Snippet 1: Alur proteksi route untuk semua endpoint admin.*
+
+Route /api/admin/login adalah satu-satunya endpoint dalam group admin yang tidak melewati middleware karena didaftarkan sebelum statement h.Use yang mengaktifkan middleware. Ini memungkinkan admin untuk mendapatkan token terlebih dahulu.
+
+### B.2 Admin Endpoint Categories
+
+```
+/api/admin/
+├── login                    (POST)  [Public]
+│
+├── dashboard               (GET)   [Protected]
+├── growth                  (GET)   [Protected]
+│
+├── users                   (GET)   [Protected]
+├── users/:id               (GET)   [Protected]
+├── users/:id               (PUT)   [Protected]
+├── users/:id/status        (PUT)   [Protected]
+├── users/:id               (DELETE)[Protected]
+│
+├── transactions            (GET)   [Protected]
+│
+├── logs                    (GET)   [Protected]
+├── logs/:id                (GET)   [Protected]
+│
+├── subscriptions/upgrade   (POST)  [Protected]
+├── subscriptions/refund    (POST)  [Protected]
+│
+├── plans                   (GET)   [Protected]
+├── plans                   (POST)  [Protected]
+├── plans/:id               (PUT)   [Protected]
+├── plans/:id               (DELETE)[Protected]
+├── plans/:id/features      (GET)   [Protected]
+├── plans/:id/features      (POST)  [Protected]
+├── plans/:id/features/:fid (DELETE)[Protected]
+│
+├── features                (GET)   [Protected]
+├── features                (POST)  [Protected]
+├── features/:id            (PUT)   [Protected]
+├── features/:id            (DELETE)[Protected]
+│
+├── refunds                 (GET)   [Protected]
+├── refunds/:id/approve     (POST)  [Protected]
+│
+└── token-usage             (GET)   [Protected]
+```
+
+*Snippet 2: Hierarki endpoint admin panel.*
+
+---
+
+## C. Arsitektur Backend - 20 Komponen
+
+### C.1 Admin Controller Interface
+
+Interface ini mendefinisikan kontrak untuk semua endpoint admin. Setiap method merepresentasikan satu endpoint HTTP yang tersedia untuk administrator.
+
+Lokasi file adalah internal/controller/admin_controller.go yang berisi definisi interface IAdminController.
+
+```go
+type IAdminController interface {
+	RegisterRoutes(r fiber.Router)
+	Login(ctx *fiber.Ctx) error
+	
+	// Dashboard
+	GetDashboardStats(ctx *fiber.Ctx) error
+	GetUserGrowth(ctx *fiber.Ctx) error
+	
+	// User Management
+	GetAllUsers(ctx *fiber.Ctx) error
+	GetUserDetail(ctx *fiber.Ctx) error
+	UpdateUserStatus(ctx *fiber.Ctx) error
+	UpdateUser(ctx *fiber.Ctx) error
+	DeleteUser(ctx *fiber.Ctx) error
+	
+	// Transactions
+	GetTransactions(ctx *fiber.Ctx) error
+	
+	// Logs
+	GetLogs(ctx *fiber.Ctx) error
+	GetLogDetail(ctx *fiber.Ctx) error
+	
+	// Subscription Actions
+	UpgradeSubscription(ctx *fiber.Ctx) error
+	RefundSubscription(ctx *fiber.Ctx) error
+	
+	// Plan Management
+	CreatePlan(ctx *fiber.Ctx) error
+	UpdatePlan(ctx *fiber.Ctx) error
+	DeletePlan(ctx *fiber.Ctx) error
+	GetAllPlans(ctx *fiber.Ctx) error
+	
+	// Plan Feature Management
+	GetPlanFeatures(ctx *fiber.Ctx) error
+	CreatePlanFeature(ctx *fiber.Ctx) error
+	DeletePlanFeature(ctx *fiber.Ctx) error
+	
+	// Feature Catalog
+	GetAllFeatures(ctx *fiber.Ctx) error
+	CreateFeature(ctx *fiber.Ctx) error
+	UpdateFeature(ctx *fiber.Ctx) error
+	DeleteFeature(ctx *fiber.Ctx) error
+	
+	// Refund Management
+	GetRefunds(ctx *fiber.Ctx) error
+	ApproveRefund(ctx *fiber.Ctx) error
+	
+	// Token Usage
+	GetTokenUsage(ctx *fiber.Ctx) error
+}
+```
+
+*Snippet 3: Interface lengkap untuk admin controller.*
+
+Interface mengelompokkan method berdasarkan fungsionalitas untuk memudahkan pemahaman. Setiap method menerima Fiber context dan mengembalikan error yang akan ditangani oleh error middleware.
+
+### C.2 Admin Controller Struct
+
+Struct ini mengimplementasikan IAdminController dengan dua dependency yaitu AdminService untuk logika bisnis dan AuthService untuk autentikasi admin login.
+
+Lokasi file adalah internal/controller/admin_controller.go.
+
+```go
+type adminController struct {
+	service     service.IAdminService
+	authService service.IAuthService
+}
+
+func NewAdminController(service service.IAdminService, authService service.IAuthService) IAdminController {
+	return &adminController{
+		service:     service,
+		authService: authService,
+	}
+}
+```
+
+*Snippet 4: Konstruksi admin controller dengan dependencies.*
+
+AdminService menangani semua operasi manajemen seperti user CRUD, plan CRUD, dan statistik dashboard. AuthService khusus digunakan untuk endpoint login admin yang memerlukan validasi role ketat.
+
+### C.3 Admin Middleware
+
+Middleware ini memvalidasi JWT dan memeriksa role admin sebelum request diteruskan ke handler. Ini adalah gatekeeper utama untuk semua endpoint admin.
+
+Lokasi file adalah internal/controller/admin_controller.go dalam method adminMiddleware.
+
+```go
+func (c *adminController) adminMiddleware(ctx *fiber.Ctx) error {
+	authHeader := ctx.Get("Authorization")
+
+	if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(
+			serverutils.ErrorResponse(401, "Missing or invalid authorization header"))
+	}
+	tokenStr := authHeader[7:]
+
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "default_secret"
+	}
+
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	})
+
+	if err != nil || token == nil || !token.Valid {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(
+			serverutils.ErrorResponse(401, "Invalid or expired token"))
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(
+			serverutils.ErrorResponse(401, "Invalid token claims"))
+	}
+
+	// CRITICAL: Role Check
+	role, ok := claims["role"].(string)
+	if !ok {
+		return ctx.Status(fiber.StatusForbidden).JSON(
+			serverutils.ErrorResponse(403, "Access denied: Role missing"))
+	}
+	if role != "admin" {
+		return ctx.Status(fiber.StatusForbidden).JSON(
+			serverutils.ErrorResponse(403, "Access denied: Admins only"))
+	}
+
+	if userId, exists := claims["user_id"]; exists {
+		ctx.Locals("user_id", userId)
+	}
+
+	return ctx.Next()
+}
+```
+
+*Snippet 5: Middleware validasi admin role.*
+
+Middleware melakukan empat tahap validasi: keberadaan header Authorization, kevalidan JWT signature, keberadaan claim role, dan kecocokan role dengan "admin". Setiap tahap yang gagal mengembalikan status code yang sesuai.
+
+### C.4 Route Registration
+
+Method ini mendaftarkan semua route admin dengan middleware yang sesuai. Login route didaftarkan sebelum middleware, sisanya setelah middleware.
+
+Lokasi file adalah internal/controller/admin_controller.go.
+
+```go
+func (c *adminController) RegisterRoutes(r fiber.Router) {
+	h := r.Group("/admin")
+
+	// Public Route - Before Middleware
+	h.Post("/login", c.Login)
+
+	// Protected Routes - After Middleware
+	h.Use(c.adminMiddleware)
+
+	// Dashboard
+	h.Get("/dashboard", c.GetDashboardStats)
+	h.Get("/growth", c.GetUserGrowth)
+
+	// Users
+	h.Get("/users", c.GetAllUsers)
+	h.Get("/users/:id", c.GetUserDetail)
+	h.Put("/users/:id/status", c.UpdateUserStatus)
+	h.Put("/users/:id", c.UpdateUser)
+	h.Delete("/users/:id", c.DeleteUser)
+
+	// Transactions
+	h.Get("/transactions", c.GetTransactions)
+
+	// Logs
+	h.Get("/logs", c.GetLogs)
+	h.Get("/logs/:id", c.GetLogDetail)
+
+	// Subscription Actions
+	h.Post("/subscriptions/upgrade", c.UpgradeSubscription)
+	h.Post("/subscriptions/refund", c.RefundSubscription)
+
+	// Plan Management
+	h.Post("/plans", c.CreatePlan)
+	h.Get("/plans", c.GetAllPlans)
+	h.Put("/plans/:id", c.UpdatePlan)
+	h.Delete("/plans/:id", c.DeletePlan)
+
+	// Plan Feature Management
+	h.Get("/plans/:id/features", c.GetPlanFeatures)
+	h.Post("/plans/:id/features", c.CreatePlanFeature)
+	h.Delete("/plans/:id/features/:featureId", c.DeletePlanFeature)
+
+	// Feature Catalog
+	h.Get("/features", c.GetAllFeatures)
+	h.Post("/features", c.CreateFeature)
+	h.Put("/features/:id", c.UpdateFeature)
+	h.Delete("/features/:id", c.DeleteFeature)
+
+	// Refund Management
+	h.Get("/refunds", c.GetRefunds)
+	h.Post("/refunds/:id/approve", c.ApproveRefund)
+
+	// Token Usage
+	h.Get("/token-usage", c.GetTokenUsage)
+}
+```
+
+*Snippet 6: Registrasi lengkap route admin.*
+
+Statement h.Use(c.adminMiddleware) mendaftarkan middleware untuk semua route yang didefinisikan setelahnya. Route /login yang didaftarkan sebelum statement ini tidak melewati middleware.
+
+### C.5 Admin Service Interface
+
+Interface ini mendefinisikan kontrak untuk semua operasi bisnis admin. Setiap method merepresentasikan satu use case yang dapat dilakukan oleh administrator.
+
+Lokasi file adalah internal/service/admin_service.go.
+
+```go
+type IAdminService interface {
+	// Dashboard
+	GetDashboardStats(ctx context.Context) (*dto.AdminDashboardStats, error)
+	GetUserGrowth(ctx context.Context) ([]*dto.UserGrowthStats, error)
+
+	// User Management
+	GetAllUsers(ctx context.Context, page, limit int, search string) ([]*dto.UserListResponse, error)
+	GetUserDetail(ctx context.Context, userId uuid.UUID) (*dto.UserProfileResponse, error)
+	UpdateUserStatus(ctx context.Context, userId uuid.UUID, status string) error
+	UpdateUser(ctx context.Context, userId uuid.UUID, req dto.AdminUpdateUserRequest) (*dto.UserProfileResponse, error)
+	DeleteUser(ctx context.Context, userId uuid.UUID) error
+
+	// Transaction Management
+	GetTransactions(ctx context.Context, page, limit int, status string) ([]*dto.TransactionListResponse, error)
+
+	// Logs
+	GetSystemLogs(ctx context.Context, page, limit int, level string) ([]*dto.LogListResponse, error)
+	GetLogDetail(ctx context.Context, logId string) (*dto.LogDetailResponse, error)
+
+	// Subscription Management
+	UpgradeSubscription(ctx context.Context, req dto.AdminSubscriptionUpgradeRequest) (*dto.AdminSubscriptionUpgradeResponse, error)
+	RefundSubscription(ctx context.Context, req dto.AdminRefundRequest) (*dto.AdminRefundResponse, error)
+
+	// Refund Management
+	GetRefunds(ctx context.Context, page, limit int, status string) ([]*dto.AdminRefundListResponse, error)
+	ApproveRefund(ctx context.Context, refundId uuid.UUID, req dto.AdminApproveRefundRequest) (*dto.AdminApproveRefundResponse, error)
+
+	// Plan Management
+	CreatePlan(ctx context.Context, req dto.AdminCreatePlanRequest) (*dto.AdminPlanResponse, error)
+	UpdatePlan(ctx context.Context, id uuid.UUID, req dto.AdminUpdatePlanRequest) (*dto.AdminPlanResponse, error)
+	DeletePlan(ctx context.Context, id uuid.UUID) error
+	GetAllPlans(ctx context.Context) ([]*dto.AdminPlanResponse, error)
+
+	// Plan Feature Management
+	GetPlanFeatures(ctx context.Context, planId uuid.UUID) ([]*dto.PlanFeatureResponse, error)
+	CreatePlanFeature(ctx context.Context, planId uuid.UUID, req dto.CreatePlanFeatureRequest) (*dto.PlanFeatureResponse, error)
+	DeletePlanFeature(ctx context.Context, planId uuid.UUID, featureId uuid.UUID) error
+
+	// Feature Catalog Management
+	GetAllFeatures(ctx context.Context) ([]*dto.FeatureResponse, error)
+	CreateFeature(ctx context.Context, req dto.CreateFeatureRequest) (*dto.FeatureResponse, error)
+	UpdateFeature(ctx context.Context, id uuid.UUID, req dto.UpdateFeatureRequest) (*dto.FeatureResponse, error)
+	DeleteFeature(ctx context.Context, id uuid.UUID) error
+
+	// Token Usage Tracking
+	GetTokenUsage(ctx context.Context, page, limit int) ([]*dto.TokenUsageResponse, error)
+}
+```
+
+*Snippet 7: Interface lengkap untuk admin service.*
+
+Interface dikelompokkan berdasarkan modul fungsional untuk memudahkan navigasi dan pemahaman scope masing-masing method.
+
+### C.6 Admin Service Struct
+
+Struct ini mengimplementasikan IAdminService dengan dependency RepositoryFactory dan Logger.
+
+Lokasi file adalah internal/service/admin_service.go.
+
+```go
+type adminService struct {
+	uowFactory unitofwork.RepositoryFactory
+	logger     logger.ILogger
+}
+
+func NewAdminService(
+	uowFactory unitofwork.RepositoryFactory,
+	logger logger.ILogger,
+) IAdminService {
+	return &adminService{
+		uowFactory: uowFactory,
+		logger:     logger,
+	}
+}
+```
+
+*Snippet 8: Konstruksi admin service dengan dependencies.*
+
+UowFactory digunakan untuk mengakses repository dalam transaksi yang terisolasi. Logger digunakan untuk audit trail dan monitoring aktivitas admin.
+
+---
+
+## D. Dashboard Analytics Module
+
+### D.1 Get Dashboard Stats
+
+Endpoint ini mengembalikan statistik ringkasan untuk dashboard admin termasuk total users, active users, total revenue, active subscribers, dan recent transactions.
+
+```go
+func (s *adminService) GetDashboardStats(ctx context.Context) (*dto.AdminDashboardStats, error) {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+
+	totalUsers, err := uow.UserRepository().Count(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	activeUsers, err := uow.UserRepository().CountByStatus(ctx, string(entity.UserStatusActive))
+	if err != nil {
+		return nil, err
+	}
+
+	totalRevenue, err := uow.SubscriptionRepository().GetTotalRevenue(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	activeSubs, err := uow.SubscriptionRepository().CountActiveSubscribers(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	recentTxs, err := uow.SubscriptionRepository().GetTransactions(ctx, "", 5, 0)
+	var recentTxDtos []dto.TransactionListResponse
+	if err == nil {
+		for _, t := range recentTxs {
+			recentTxDtos = append(recentTxDtos, dto.TransactionListResponse{
+				Id:              t.Id,
+				UserId:          t.UserId,
+				UserEmail:       t.UserEmail,
+				PlanName:        t.PlanName,
+				Amount:          t.Amount,
+				Status:          string(t.Status),
+				PaymentStatus:   string(t.PaymentStatus),
+				TransactionDate: t.CreatedAt,
+				MidtransOrderId: t.MidtransOrderId,
+			})
+		}
+	}
+
+	return &dto.AdminDashboardStats{
+		TotalUsers:         int(totalUsers),
+		ActiveUsers:        int(activeUsers),
+		TotalRevenue:       totalRevenue,
+		ActiveSubscribers:  activeSubs,
+		RecentTransactions: recentTxDtos,
+	}, nil
+}
+```
+
+*Snippet 9: Implementasi get dashboard stats.*
+
+Method ini mengagregasi data dari multiple repository untuk menyediakan overview lengkap. Recent transactions dibatasi 5 item untuk performa.
+
+### D.2 Dashboard Stats DTO
+
+```go
+type AdminDashboardStats struct {
+	TotalRevenue       float64                   `json:"total_revenue"`
+	ActiveSubscribers  int                       `json:"active_subscribers"`
+	TotalUsers         int                       `json:"total_users"`
+	ActiveUsers        int                       `json:"active_users"`
+	RecentTransactions []TransactionListResponse `json:"recent_transactions"`
+}
+```
+
+*Snippet 10: DTO untuk response dashboard stats.*
+
+---
+
+## E. User Management Module
+
+### E.1 Get All Users dengan Pagination dan Search
+
+Endpoint ini mengembalikan daftar user dengan support pagination dan search.
+
+```go
+func (c *adminController) GetAllUsers(ctx *fiber.Ctx) error {
+	page, _ := strconv.Atoi(ctx.Query("page", "1"))
+	limit, _ := strconv.Atoi(ctx.Query("limit", "10"))
+	search := ctx.Query("q", "")
+
+	users, err := c.service.GetAllUsers(ctx.Context(), page, limit, search)
+	if err != nil {
+		return ctx.Status(fiber.StatusInternalServerError).JSON(serverutils.ErrorResponse(500, err.Error()))
+	}
+	return ctx.JSON(serverutils.SuccessResponse("User list", users))
+}
+```
+
+*Snippet 11: Controller handler untuk get all users.*
+
+Query parameters yang didukung: page (default 1), limit (default 10), dan q untuk search term.
+
+```go
+func (s *adminService) GetAllUsers(ctx context.Context, page, limit int, search string) ([]*dto.UserListResponse, error) {
+	if page < 1 {
+		page = 1
+	}
+	if limit < 1 {
+		limit = 10
+	}
+	offset := (page - 1) * limit
+
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+	var users []*entity.User
+	var err error
+
+	if search != "" {
+		users, err = uow.UserRepository().SearchUsers(ctx, search, limit, offset)
+	} else {
+		users, err = uow.UserRepository().FindAll(ctx,
+			specification.Pagination{Limit: limit, Offset: offset},
+			specification.OrderBy{Field: "created_at", Desc: true},
+		)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	var res []*dto.UserListResponse
+	for _, u := range users {
+		res = append(res, &dto.UserListResponse{
+			Id:        u.Id,
+			Email:     u.Email,
+			FullName:  u.FullName,
+			Role:      string(u.Role),
+			Status:    string(u.Status),
+			CreatedAt: u.CreatedAt,
+		})
+	}
+	return res, nil
+}
+```
+
+*Snippet 12: Service implementation untuk get all users.*
+
+Jika search term diberikan, method menggunakan SearchUsers yang melakukan LIKE query pada email dan full_name. Jika tidak, menggunakan FindAll dengan pagination dan ordering.
+
+### E.2 Update User
+
+Endpoint ini memungkinkan admin mengupdate informasi user termasuk role, status, dan profile data.
+
+```go
+func (s *adminService) UpdateUser(ctx context.Context, userId uuid.UUID, req dto.AdminUpdateUserRequest) (*dto.UserProfileResponse, error) {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+
+	user, err := uow.UserRepository().FindOne(ctx, specification.ByID{ID: userId})
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	// Update fields if present
+	if req.FullName != "" {
+		user.FullName = req.FullName
+	}
+	if req.Email != "" {
+		user.Email = req.Email
+	}
+	if req.Role != "" {
+		user.Role = entity.UserRole(req.Role)
+	}
+	if req.Status != "" {
+		user.Status = entity.UserStatus(req.Status)
+	}
+	if req.Avatar != "" {
+		val := req.Avatar
+		user.AvatarURL = &val
+	}
+
+	if err := uow.UserRepository().Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	return &dto.UserProfileResponse{
+		Id:           user.Id,
+		Email:        user.Email,
+		FullName:     user.FullName,
+		Role:         string(user.Role),
+		Status:       string(user.Status),
+		AiDailyUsage: user.AiDailyUsage,
+		CreatedAt:    user.CreatedAt,
+	}, nil
+}
+```
+
+*Snippet 13: Service implementation untuk update user.*
+
+Update menggunakan partial update pattern dimana hanya field yang non-empty dalam request yang diupdate. Ini memungkinkan admin mengupdate satu field tanpa mempengaruhi field lain.
+
+### E.3 User Management DTOs
+
+```go
+type AdminUpdateUserRequest struct {
+	FullName string `json:"full_name"`
+	Email    string `json:"email" validate:"omitempty,email"`
+	Role     string `json:"role" validate:"omitempty,oneof=user admin"`
+	Status   string `json:"status" validate:"omitempty,oneof=active pending banned"`
+	Avatar   string `json:"avatar"`
+}
+
+type UserListResponse struct {
+	Id        uuid.UUID `json:"id"`
+	Email     string    `json:"email"`
+	FullName  string    `json:"full_name"`
+	Role      string    `json:"role"`
+	Status    string    `json:"status"`
+	CreatedAt time.Time `json:"created_at"`
+}
+```
+
+*Snippet 14: DTOs untuk user management.*
+
+Validation tag oneof memastikan nilai role hanya bisa "user" atau "admin", dan status hanya bisa "active", "pending", atau "banned".
+
+---
+
+## F. Plan Management Module
+
+### F.1 Create Plan
+
+Endpoint ini memungkinkan admin membuat subscription plan baru dengan limits dan features.
+
+```go
+func (s *adminService) CreatePlan(ctx context.Context, req dto.AdminCreatePlanRequest) (*dto.AdminPlanResponse, error) {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+
+	newPlan := &entity.SubscriptionPlan{
+		Name:                     req.Name,
+		Slug:                     req.Slug,
+		Price:                    req.Price,
+		TaxRate:                  req.TaxRate,
+		BillingPeriod:            entity.BillingPeriod(req.BillingPeriod),
+		MaxNotebooks:             req.Features.MaxNotebooks,
+		MaxNotesPerNotebook:      req.Features.MaxNotesPerNotebook,
+		SemanticSearchEnabled:    req.Features.SemanticSearch,
+		AiChatEnabled:            req.Features.AiChat,
+		AiChatDailyLimit:         req.Features.AiChatDailyLimit,
+		SemanticSearchDailyLimit: req.Features.SemanticSearchDailyLimit,
+		IsActive:                 true,
+	}
+
+	if err := uow.SubscriptionRepository().CreatePlan(ctx, newPlan); err != nil {
+		return nil, err
+	}
+
+	return &dto.AdminPlanResponse{
+		Id:            newPlan.Id,
+		Name:          newPlan.Name,
+		Slug:          newPlan.Slug,
+		Price:         newPlan.Price,
+		BillingPeriod: string(newPlan.BillingPeriod),
+		Features:      req.Features,
+	}, nil
+}
+```
+
+*Snippet 15: Service implementation untuk create plan.*
+
+Plan baru otomatis di-set IsActive = true. Features embedded dalam request DTO untuk kemudahan input dari frontend.
+
+### F.2 Update Plan
+
+```go
+func (s *adminService) UpdatePlan(ctx context.Context, id uuid.UUID, req dto.AdminUpdatePlanRequest) (*dto.AdminPlanResponse, error) {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+
+	plan, err := uow.SubscriptionRepository().FindOnePlan(ctx, specification.ByID{ID: id})
+	if err != nil {
+		return nil, err
+	}
+	if plan == nil {
+		return nil, fmt.Errorf("plan not found")
+	}
+
+	// Basic Info
+	if req.Name != "" {
+		plan.Name = req.Name
+	}
+	if req.Description != nil {
+		plan.Description = *req.Description
+	}
+	if req.Tagline != nil {
+		plan.Tagline = *req.Tagline
+	}
+	if req.Price != nil {
+		plan.Price = *req.Price
+	}
+	if req.TaxRate != nil {
+		plan.TaxRate = *req.TaxRate
+	}
+
+	// Display Settings
+	if req.IsMostPopular != nil {
+		plan.IsMostPopular = *req.IsMostPopular
+	}
+	if req.IsActive != nil {
+		plan.IsActive = *req.IsActive
+	}
+	if req.SortOrder != nil {
+		plan.SortOrder = *req.SortOrder
+	}
+
+	// Features (limits and AI toggles)
+	if req.Features != nil {
+		plan.MaxNotebooks = req.Features.MaxNotebooks
+		plan.MaxNotesPerNotebook = req.Features.MaxNotesPerNotebook
+		plan.SemanticSearchEnabled = req.Features.SemanticSearch
+		plan.AiChatEnabled = req.Features.AiChat
+		plan.AiChatDailyLimit = req.Features.AiChatDailyLimit
+		plan.SemanticSearchDailyLimit = req.Features.SemanticSearchDailyLimit
+	}
+
+	if err := uow.SubscriptionRepository().UpdatePlan(ctx, plan); err != nil {
+		return nil, err
+	}
+
+	return &dto.AdminPlanResponse{
+		Id:            plan.Id,
+		Name:          plan.Name,
+		Slug:          plan.Slug,
+		Description:   plan.Description,
+		Tagline:       plan.Tagline,
+		Price:         plan.Price,
+		TaxRate:       plan.TaxRate,
+		BillingPeriod: string(plan.BillingPeriod),
+		IsMostPopular: plan.IsMostPopular,
+		IsActive:      plan.IsActive,
+		SortOrder:     plan.SortOrder,
+		Features: dto.PlanFeaturesDTO{
+			MaxNotebooks:             plan.MaxNotebooks,
+			MaxNotesPerNotebook:      plan.MaxNotesPerNotebook,
+			SemanticSearch:           plan.SemanticSearchEnabled,
+			AiChat:                   plan.AiChatEnabled,
+			AiChatDailyLimit:         plan.AiChatDailyLimit,
+			SemanticSearchDailyLimit: plan.SemanticSearchDailyLimit,
+		},
+	}, nil
+}
+```
+
+*Snippet 16: Service implementation untuk update plan.*
+
+Update menggunakan pointer untuk optional fields (*string, *float64, *bool). Ini memungkinkan admin mengupdate subset field tanpa harus mengirim semua field.
+
+### F.3 Plan Management DTOs
+
+```go
+type AdminCreatePlanRequest struct {
+	Name          string          `json:"name" validate:"required"`
+	Slug          string          `json:"slug" validate:"required"`
+	Price         float64         `json:"price" validate:"gte=0"`
+	TaxRate       float64         `json:"tax_rate"`
+	BillingPeriod string          `json:"billing_period" validate:"required,oneof=monthly yearly"`
+	Features      PlanFeaturesDTO `json:"features"`
+}
+
+type AdminUpdatePlanRequest struct {
+	Name          string           `json:"name,omitempty"`
+	Description   *string          `json:"description,omitempty"`
+	Tagline       *string          `json:"tagline,omitempty"`
+	Price         *float64         `json:"price,omitempty"`
+	TaxRate       *float64         `json:"tax_rate,omitempty"`
+	IsMostPopular *bool            `json:"is_most_popular,omitempty"`
+	IsActive      *bool            `json:"is_active,omitempty"`
+	SortOrder     *int             `json:"sort_order,omitempty"`
+	Features      *PlanFeaturesDTO `json:"features,omitempty"`
+}
+
+type PlanFeaturesDTO struct {
+	MaxNotebooks             int  `json:"max_notebooks"`
+	MaxNotesPerNotebook      int  `json:"max_notes_per_notebook"`
+	SemanticSearch           bool `json:"semantic_search"`
+	AiChat                   bool `json:"ai_chat"`
+	AiChatDailyLimit         int  `json:"ai_chat_daily_limit"`
+	SemanticSearchDailyLimit int  `json:"semantic_search_daily_limit"`
+}
+
+type AdminPlanResponse struct {
+	Id            uuid.UUID       `json:"id"`
+	Name          string          `json:"name"`
+	Slug          string          `json:"slug"`
+	Description   string          `json:"description"`
+	Tagline       string          `json:"tagline"`
+	Price         float64         `json:"price"`
+	TaxRate       float64         `json:"tax_rate"`
+	BillingPeriod string          `json:"billing_period"`
+	IsMostPopular bool            `json:"is_most_popular"`
+	IsActive      bool            `json:"is_active"`
+	SortOrder     int             `json:"sort_order"`
+	Features      PlanFeaturesDTO `json:"features"`
+}
+```
+
+*Snippet 17: DTOs untuk plan management.*
+
+---
+
+## G. Subscription Management Module
+
+### G.1 Upgrade Subscription
+
+Endpoint ini memungkinkan admin mengupgrade subscription user secara manual dengan proration.
+
+```go
+func (s *adminService) UpgradeSubscription(ctx context.Context, req dto.AdminSubscriptionUpgradeRequest) (*dto.AdminSubscriptionUpgradeResponse, error) {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+
+	// 1. Validate User
+	user, err := uow.UserRepository().FindOne(ctx, specification.ByID{ID: req.UserId})
+	if err != nil || user == nil {
+		return nil, fmt.Errorf("user not found")
+	}
+
+	// 2. Get New Plan
+	newPlan, err := uow.SubscriptionRepository().FindOnePlan(ctx, specification.ByID{ID: req.NewPlanId})
+	if err != nil || newPlan == nil {
+		return nil, fmt.Errorf("target plan not found")
+	}
+
+	// 3. Find Active Subscription
+	specs := []specification.Specification{
+		specification.Filter("user_id", req.UserId),
+		specification.Filter("status", "active"),
+	}
+	currentSub, err := uow.SubscriptionRepository().FindOneSubscription(ctx, specs...)
+
+	// Transaction
+	if err := uow.Begin(ctx); err != nil {
+		return nil, err
+	}
+	defer uow.Rollback()
+
+	var credit float64 = 0
+	var amountDue float64 = newPlan.Price
+
+	// Proration Logic
+	if currentSub != nil {
+		totalDuration := currentSub.CurrentPeriodEnd.Sub(currentSub.CurrentPeriodStart)
+		usedDuration := time.Since(currentSub.CurrentPeriodStart)
+		remainingDuration := totalDuration - usedDuration
+
+		if remainingDuration > 0 && totalDuration.Hours() > 0 {
+			oldPlan, err := uow.SubscriptionRepository().FindOnePlan(ctx, specification.ByID{ID: currentSub.PlanId})
+			if err == nil && oldPlan != nil {
+				percentRemaining := remainingDuration.Hours() / totalDuration.Hours()
+				credit = oldPlan.Price * percentRemaining
+			}
+		}
+
+		currentSub.Status = "canceled"
+		if err := uow.SubscriptionRepository().UpdateSubscription(ctx, currentSub); err != nil {
+			return nil, err
+		}
+	}
+
+	// Apply Credit
+	if credit > amountDue {
+		credit = amountDue
+	}
+	amountDue -= credit
+
+	// Create New Subscription
+	newSub := &entity.UserSubscription{
+		UserId:             req.UserId,
+		PlanId:             newPlan.Id,
+		Status:             "active",
+		PaymentStatus:      "paid",
+		CurrentPeriodStart: time.Now(),
+		CurrentPeriodEnd:   time.Now().AddDate(0, 1, 0),
+	}
+	if newPlan.BillingPeriod == "yearly" {
+		newSub.CurrentPeriodEnd = time.Now().AddDate(1, 0, 0)
+	}
+
+	if err := uow.SubscriptionRepository().CreateSubscription(ctx, newSub); err != nil {
+		return nil, err
+	}
+
+	s.logger.Info("ADMIN", "Upgraded User Subscription", map[string]interface{}{
+		"userId":  req.UserId.String(),
+		"newPlan": newPlan.Name,
+		"credit":  credit,
+	})
+
+	if err := uow.Commit(); err != nil {
+		return nil, err
+	}
+
+	return &dto.AdminSubscriptionUpgradeResponse{
+		OldSubscriptionId: currentSub.Id,
+		NewSubscriptionId: newSub.Id,
+		CreditApplied:     credit,
+		AmountDue:         amountDue,
+		Status:            "success",
+	}, nil
+}
+```
+
+*Snippet 18: Service implementation untuk upgrade subscription.*
+
+Proration dihitung berdasarkan waktu yang tersisa dari subscription lama. Credit dari plan lama dikurangi dari harga plan baru.
+
+### G.2 Refund Subscription
+
+```go
+func (s *adminService) RefundSubscription(ctx context.Context, req dto.AdminRefundRequest) (*dto.AdminRefundResponse, error) {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+
+	sub, err := uow.SubscriptionRepository().FindOneSubscription(ctx, specification.ByID{ID: req.SubscriptionId})
+	if err != nil || sub == nil {
+		return nil, fmt.Errorf("subscription not found")
+	}
+
+	if err := uow.Begin(ctx); err != nil {
+		return nil, err
+	}
+	defer uow.Rollback()
+
+	sub.Status = "canceled"
+	sub.PaymentStatus = "refunded"
+	sub.CurrentPeriodEnd = time.Now()
+
+	if err := uow.SubscriptionRepository().UpdateSubscription(ctx, sub); err != nil {
+		return nil, err
+	}
+
+	// Calculate refund amount
+	refundAmt := 0.0
+	if req.Amount != nil {
+		refundAmt = *req.Amount
+	} else {
+		plan, err := uow.SubscriptionRepository().FindOnePlan(ctx, specification.ByID{ID: sub.PlanId})
+		if err == nil && plan != nil {
+			refundAmt = plan.Price
+		}
+	}
+
+	// Create refund record
+	refundId := uuid.New()
+	refund := &entity.Refund{
+		ID:             refundId,
+		SubscriptionID: sub.Id,
+		UserID:         sub.UserId,
+		Amount:         refundAmt,
+		Reason:         req.Reason,
+		Status:         "processed",
+		CreatedAt:      time.Now(),
+	}
+
+	if err := uow.RefundRepository().Create(ctx, refund); err != nil {
+		return nil, err
+	}
+
+	s.logger.Info("ADMIN", "Refunded Subscription", map[string]interface{}{
+		"subscriptionId": sub.Id.String(),
+		"refundId":       refundId.String(),
+		"amount":         refundAmt,
+		"reason":         req.Reason,
+	})
+
+	if err := uow.Commit(); err != nil {
+		return nil, err
+	}
+
+	return &dto.AdminRefundResponse{
+		RefundId:       refundId.String(),
+		RefundedAmount: refundAmt,
+		Status:         "processed",
+	}, nil
+}
+```
+
+*Snippet 19: Service implementation untuk refund subscription.*
+
+Jika amount tidak diberikan dalam request, sistem menggunakan harga plan sebagai full refund. Refund record dibuat untuk audit trail.
+
+---
+
+## H. Log Monitoring Module
+
+### H.1 Get System Logs
+
+Endpoint ini mengembalikan daftar log sistem dengan filter level dan pagination.
+
+```go
+func (s *adminService) GetSystemLogs(ctx context.Context, page, limit int, level string) ([]*dto.LogListResponse, error) {
+	logs, err := s.logger.GetLogs(level, limit, (page-1)*limit)
+	if err != nil {
+		return nil, err
+	}
+
+	var res []*dto.LogListResponse
+	for _, l := range logs {
+		ts, _ := time.Parse(time.RFC3339, l.Timestamp)
+		res = append(res, &dto.LogListResponse{
+			Id:        l.Id,
+			Level:     l.Level,
+			Module:    l.Module,
+			Message:   l.Message,
+			CreatedAt: ts,
+		})
+	}
+	return res, nil
+}
+```
+
+*Snippet 20: Service implementation untuk get system logs.*
+
+Log ID adalah MD5 hash bukan UUID. Ini memungkinkan identifikasi unik tanpa primary key di file log.
+
+---
+
+## I. Ringkasan Arsitektur
+
+### I.1 Endpoint Summary Table
+
+| Module | Endpoint | Method | Description |
+|--------|----------|--------|-------------|
+| Auth | /api/admin/login | POST | Admin login |
+| Dashboard | /api/admin/dashboard | GET | Get stats |
+| Dashboard | /api/admin/growth | GET | User growth |
+| Users | /api/admin/users | GET | List users |
+| Users | /api/admin/users/:id | GET | User detail |
+| Users | /api/admin/users/:id | PUT | Update user |
+| Users | /api/admin/users/:id/status | PUT | Update status |
+| Users | /api/admin/users/:id | DELETE | Delete user |
+| Transactions | /api/admin/transactions | GET | List transactions |
+| Logs | /api/admin/logs | GET | List logs |
+| Logs | /api/admin/logs/:id | GET | Log detail |
+| Subscription | /api/admin/subscriptions/upgrade | POST | Upgrade user |
+| Subscription | /api/admin/subscriptions/refund | POST | Refund user |
+| Plans | /api/admin/plans | GET | List plans |
+| Plans | /api/admin/plans | POST | Create plan |
+| Plans | /api/admin/plans/:id | PUT | Update plan |
+| Plans | /api/admin/plans/:id | DELETE | Delete plan |
+| Plan Features | /api/admin/plans/:id/features | GET | List features |
+| Plan Features | /api/admin/plans/:id/features | POST | Add feature |
+| Plan Features | /api/admin/plans/:id/features/:fid | DELETE | Remove feature |
+| Feature Catalog | /api/admin/features | GET | List catalog |
+| Feature Catalog | /api/admin/features | POST | Create feature |
+| Feature Catalog | /api/admin/features/:id | PUT | Update feature |
+| Feature Catalog | /api/admin/features/:id | DELETE | Delete feature |
+| Refunds | /api/admin/refunds | GET | List refund requests |
+| Refunds | /api/admin/refunds/:id/approve | POST | Approve refund |
+| Token Usage | /api/admin/token-usage | GET | List AI usage |
+
+*Tabel 1: Ringkasan 27 endpoint admin panel.*
+
+### I.2 Component Count
+
+| Layer | Files | Components |
+|-------|-------|------------|
+| Controller | 1 | 27 handlers + 1 middleware |
+| Service | 1 | 24 methods |
+| DTOs | 2 | 20+ structs |
+| Repository | Multiple | UserRepo, SubscriptionRepo, RefundRepo, Logger |
+
+*Tabel 2: Jumlah komponen per layer.*
+
+---
+
+*Dokumen ini mengacu pada implementasi aktual dalam codebase tanpa modifikasi.*

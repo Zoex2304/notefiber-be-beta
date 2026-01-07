@@ -1,0 +1,135 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **Vector Embeddings & Semantic Search Flow**\nNote Embedding Generation and PGVector-Based Semantic Search
+header Embeddings & Semantic Search Sequence
+footer Page 1 of 1
+
+actor "User" as User
+actor "Client" as Client
+boundary "Server" as Server
+control "Note Service" as NoteService
+control "Publisher Service" as Publisher
+control "Controller" as Controller
+control "Search Service" as SearchService
+control "Gemini API" as Gemini
+entity "Note Repository" as NoteRepo
+entity "NoteEmbedding Repository" as EmbeddingRepo
+database "PostgreSQL + PGVector" as PGVector
+control "Plan Service" as PlanService
+
+autonumber "<b>[000]"
+
+== EMBEDDING GENERATION (On Note Create/Update) ==
+
+note over User, PGVector : Triggered by: Create Note or Update Note
+
+User -> NoteService : Create/Update Note
+activate User
+activate NoteService
+
+NoteService -[#CC6600]> Publisher : Call PublisherService (Async)
+activate Publisher
+
+Publisher -> Publisher : GetGeminiEmbedding for Note Content
+Publisher -[#CC6600]> Gemini : Generate Vector (768 dimensions)
+activate Gemini
+Gemini -> Gemini : Process Text Embedding
+Gemini -[#006600]-> Publisher : Embedding Vector
+deactivate Gemini
+
+Publisher -[#CC3300]> EmbeddingRepo : Create/Update Embedding
+activate EmbeddingRepo
+
+EmbeddingRepo -> PGVector : Store vector in PostgreSQL
+activate PGVector
+PGVector -> PGVector : INSERT/UPDATE note_embeddings\nUSING pgvector extension
+PGVector -[#006600]-> EmbeddingRepo : Embedding Stored
+deactivate PGVector
+
+EmbeddingRepo -[#006600]-> Publisher : Embedding Created/Updated
+deactivate EmbeddingRepo
+
+Publisher -[#006600]> NoteService : Embedding Process Complete (Async)
+deactivate Publisher
+
+NoteService -[#006600]> User : Note Operation Complete
+deactivate NoteService
+deactivate User
+
+== SEMANTIC SEARCH ==
+
+Client -[#CC3300]> Server : HTTP GET /api/notes/search?q=query+text
+activate Client
+activate Server
+
+note right of Server : JWT Middleware: Extract User ID
+
+Server -[#CC3300]> Controller : Parse Query
+activate Controller
+
+Controller -> Controller : Extract Search Query
+Controller -[#CC3300]> SearchService : SemanticSearch
+activate SearchService
+
+SearchService -[#CC6600]> PlanService : Guard: Check Pro Plan + SemanticSearchEnabled
+activate PlanService
+PlanService -> PlanService : Validate User's Plan Features
+PlanService -[#006600]-> SearchService : Feature Validation Result
+deactivate PlanService
+
+alt Feature Not Enabled
+    SearchService -> SearchService : Throw "Upgrade for semantic search"
+else Feature Enabled
+    SearchService -[#CC6600]> Gemini : Generate Query Embedding
+    activate Gemini
+    Gemini -> Gemini : Generate Vector from Query Text
+    Gemini -[#006600]-> SearchService : Query Embedding Vector
+    deactivate Gemini
+    
+    SearchService -[#CC3300]> EmbeddingRepo : SearchSimilar
+    activate EmbeddingRepo
+    
+    EmbeddingRepo -> PGVector : Cosine Distance Query\nwith User ID Filter
+    activate PGVector
+    PGVector -> PGVector : Execute: \nSELECT ne.note_id,\n  1 - (ne.embedding <=> ?) as similarity\nFROM note_embeddings ne\nJOIN notes n ON ne.note_id = n.id\nWHERE n.user_id = ?\nORDER BY similarity DESC\nLIMIT 20
+    PGVector -[#006600]-> EmbeddingRepo : Similar Note IDs with Scores
+    deactivate PGVector
+    
+    EmbeddingRepo -[#006600]-> SearchService : Similar Notes with Relevance Scores
+    deactivate EmbeddingRepo
+    
+    SearchService -[#CC3300]> NoteRepo : Fetch Full Note Details
+    activate NoteRepo
+    NoteRepo -[#CC3300]> PGVector : SELECT * FROM notes WHERE id IN (?)
+    activate PGVector
+    PGVector -[#006600]-> NoteRepo : Note Details
+    deactivate PGVector
+    NoteRepo -[#006600]-> SearchService : Full Note Entities
+    deactivate NoteRepo
+    
+    SearchService -> SearchService : Preserve: Relevance Order
+    SearchService -> SearchService : Build Search Results DTO
+end
+
+SearchService -[#006600]> Controller : Ranked Notes
+deactivate SearchService
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Ranked Notes
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {\n  query: "query text",\n  results: [{\n    note_id: "...",\n    title: "...",\n    excerpt: "...",\n    similarity_score: 0.85,\n    notebook_name: "...",\n    created_at: "...",\n    updated_at: "..."\n  }],\n  total_matches: 15\n}}
+deactivate Server
+deactivate Client
+
+@enduml
+

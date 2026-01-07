@@ -1,0 +1,67 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **Public Plans Retrieval Flow**\nPublic API for Landing Page - No Authentication Required
+header Public Plans Sequence
+footer Page 1 of 1
+
+actor "Public Client" as Client
+boundary "Server" as Server
+control "Plan Controller" as Controller
+control "Plan Service" as Service
+entity "Plan Repository" as Repository
+database "Database" as DB
+
+autonumber "<b>[000]"
+
+== GET PUBLIC PLANS (Landing Page) ==
+
+note over Client, DB : NO AUTH REQUIRED - Public Endpoint
+
+Client -[#CC3300]> Server : HTTP GET /api/plans
+activate Client
+activate Server
+
+Server -[#CC3300]> Controller : GetAllPlans
+activate Controller
+
+Controller -[#CC3300]> Service : GetAllActivePlansWithFeatures
+activate Service
+
+Service -[#CC3300]> Repository : FindAllPlans
+activate Repository
+
+Repository -> Repository : Build Query with GORM
+Repository -[#CC3300]> DB : SELECT plans.*, plan_features.*\nFROM plans\nLEFT JOIN plan_features ON plans.id = plan_features.plan_id\nWHERE plans.is_active = true\nORDER BY plans.price ASC
+activate DB
+DB -[#006600]-> Repository : Plans with Features Data
+deactivate DB
+
+Repository -[#006600]> Service : Plan Entities with Features Preloaded
+deactivate Repository
+
+Service -> Service : Filter: IsActive = true
+Service -> Service : Map: Entity -> DTO
+Service -> Service : Include: Limits (notebooks, notes, AI)
+Service -> Service : Include: Features list
+Service -> Service : Transform to PlanResponse DTO
+Service -[#006600]> Controller : Active Plans
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Active Plans
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{\n  success: true,\n  data: [{\n    id: "...",\n    name: "Free",\n    slug: "free",\n    price: 0,\n    description: "Basic features",\n    is_popular: false,\n    limits: {\n      notebooks: 3,\n      notes: 50,\n      ai_chat_daily: 10\n    },\n    features: [\n      "Notebook creation",\n      "Basic notes",\n      "Limited AI chat"\n    ]\n  }, {\n    id: "...",\n    name: "Pro",\n    slug: "pro",\n    price: 9.99,\n    description: "Advanced features",\n    is_popular: true,\n    limits: {\n      notebooks: 50,\n      notes: 1000,\n      ai_chat_daily: 100\n    },\n    features: [\n      "Unlimited notebooks",\n      "Priority support",\n      "Advanced AI",\n      "Semantic search"\n    ]\n  }]\n}
+deactivate Server
+deactivate Client
+
+@enduml

@@ -1,0 +1,1020 @@
+﻿============================================================
+BULKCOLLECT FULL EXPORT
+Date: 2025-12-23 21:49:03
+Total Files: 15
+Total Size: 0.01 MB
+============================================================
+============================================================
+BULKCOLLECT FULL EXPORT
+Date: 2025-12-23 21:49:03
+Total Files: 15
+Total Size: 0.01 MB
+============================================================
+
+>>> FILE: ai_credit_transaction_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type AiCreditTransaction struct {
+	Id              uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()"`
+	UserId          uuid.UUID  `gorm:"type:uuid;not null;index"`
+	TransactionType string     `gorm:"type:ai_credit_transaction_type;not null"`
+	Amount          int        `gorm:"not null"`
+	ServiceUsed     *string    `gorm:"type:text;index"`
+	RelatedId       *uuid.UUID `gorm:"type:uuid"`
+	Notes           *string    `gorm:"type:text"`
+	CreatedAt       time.Time  `gorm:"default:now();not null"`
+}
+
+func (AiCreditTransaction) TableName() string {
+	return "ai_credit_transactions"
+}
+
+
+
+>>> FILE: billing_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type BillingAddress struct {
+	Id           uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId       uuid.UUID `gorm:"type:uuid;not null;index"`
+	FirstName    string    `gorm:"type:varchar(255);not null"`
+	LastName     string    `gorm:"type:varchar(255);not null"`
+	Email        string    `gorm:"type:varchar(255);not null"`
+	Phone        string    `gorm:"type:varchar(50)"`
+	AddressLine1 string    `gorm:"type:varchar(255);not null"`
+	AddressLine2 string    `gorm:"type:varchar(255)"`
+	City         string    `gorm:"type:varchar(255);not null"`
+	State        string    `gorm:"type:varchar(255);not null"`
+	PostalCode   string    `gorm:"type:varchar(20);not null"`
+	Country      string    `gorm:"type:varchar(255);not null"`
+	IsDefault    bool      `gorm:"default:false"`
+	CreatedAt    time.Time `gorm:"autoCreateTime"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime"`
+}
+
+func (BillingAddress) TableName() string {
+	return "billing_addresses"
+}
+
+
+
+>>> FILE: chat_message_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type ChatMessage struct {
+	Id            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Chat          string         `gorm:"type:text;not null"`
+	Role          string         `gorm:"type:varchar(50);not null"`
+	ChatSessionId uuid.UUID      `gorm:"type:uuid;not null;index"`
+	CreatedAt     time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt     time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt     gorm.DeletedAt `gorm:"index"`
+}
+
+func (ChatMessage) TableName() string {
+	return "chat_messages"
+}
+
+
+
+>>> FILE: chat_message_raw_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type ChatMessageRaw struct {
+	Id            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Chat          string         `gorm:"type:text;not null"`
+	Role          string         `gorm:"type:varchar(50);not null"`
+	ChatSessionId uuid.UUID      `gorm:"type:uuid;not null;index"`
+	CreatedAt     time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt     time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt     gorm.DeletedAt `gorm:"index"`
+}
+
+func (ChatMessageRaw) TableName() string {
+	return "chat_messages_raw"
+}
+
+
+
+>>> FILE: chat_session_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type ChatSession struct {
+	Id        uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId    uuid.UUID      `gorm:"type:uuid;not null;index"` // User ownership for data isolation
+	Title     string         `gorm:"type:varchar(255);not null"`
+	CreatedAt time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+}
+
+func (ChatSession) TableName() string {
+	return "chat_sessions"
+}
+
+
+
+>>> FILE: feature_model.go
+// FILE: internal/model/feature_model.go
+// GORM model for the features (master catalog) table
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// Feature represents a feature in the master catalog
+type Feature struct {
+	Id          uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Key         string    `gorm:"type:varchar(100);uniqueIndex;not null"`
+	Name        string    `gorm:"type:varchar(255);not null"`
+	Description string    `gorm:"type:text"`
+	Category    string    `gorm:"type:varchar(50)"` // ai, storage, support, export
+	IsActive    bool      `gorm:"default:true"`
+	SortOrder   int       `gorm:"default:0"`
+	CreatedAt   time.Time `gorm:"autoCreateTime"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
+}
+
+func (Feature) TableName() string {
+	return "features"
+}
+
+
+
+>>> FILE: notebook_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type Notebook struct {
+	Id        uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name      string         `gorm:"type:varchar(255);not null"`
+	ParentId  *uuid.UUID     `gorm:"type:uuid;index"`
+	UserId    uuid.UUID      `gorm:"type:uuid;not null;index"`
+	CreatedAt time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+}
+
+func (Notebook) TableName() string {
+	return "notebooks"
+}
+
+
+
+>>> FILE: note_embedding_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/pgvector/pgvector-go"
+	"gorm.io/gorm"
+)
+
+type NoteEmbedding struct {
+	Id             uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Document       string          `gorm:"type:text"`
+	EmbeddingValue pgvector.Vector `gorm:"type:vector(768)"` // Gemini text-embedding-004 uses 768 dimensions
+	NoteId         uuid.UUID       `gorm:"type:uuid;not null;index"`
+	CreatedAt      time.Time       `gorm:"autoCreateTime"`
+	UpdatedAt      time.Time       `gorm:"autoUpdateTime"`
+	DeletedAt      gorm.DeletedAt  `gorm:"index"`
+}
+
+func (NoteEmbedding) TableName() string {
+	return "note_embeddings"
+}
+
+
+
+>>> FILE: note_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type Note struct {
+	Id         uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Title      string         `gorm:"type:varchar(255);not null"`
+	Content    string         `gorm:"type:text"`
+	NotebookId uuid.UUID      `gorm:"type:uuid;not null;index"`
+	UserId     uuid.UUID      `gorm:"type:uuid;not null;index"`
+	CreatedAt  time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt  time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
+}
+
+func (Note) TableName() string {
+	return "notes"
+}
+
+
+
+>>> FILE: refund_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type Refund struct {
+	ID             uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	SubscriptionID uuid.UUID `gorm:"type:uuid;not null"`
+	UserID         uuid.UUID `gorm:"type:uuid;not null"`
+	Amount         float64   `gorm:"type:decimal(10,2);not null"`
+	Reason         string    `gorm:"type:text"`
+	Status         string    `gorm:"type:varchar(50);default:'pending'"` // pending, approved, rejected
+	AdminNotes     string    `gorm:"type:text"`
+	ProcessedAt    *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	DeletedAt      gorm.DeletedAt `gorm:"index"`
+
+	// Relations
+	Subscription UserSubscription `gorm:"foreignKey:SubscriptionID"`
+	User         User             `gorm:"foreignKey:UserID"`
+}
+
+func (Refund) TableName() string {
+	return "refunds"
+}
+
+
+
+>>> FILE: subscription_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type SubscriptionPlan struct {
+	Id            uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name          string    `gorm:"type:varchar(255);not null"`
+	Slug          string    `gorm:"type:varchar(255);uniqueIndex;not null"`
+	Description   string    `gorm:"type:text"`
+	Tagline       string    `gorm:"type:text"` // Subtitle for pricing modal
+	Price         float64   `gorm:"type:decimal(10,2);not null"`
+	TaxRate       float64   `gorm:"type:decimal(5,4);default:0"`
+	BillingPeriod string    `gorm:"type:billing_period;not null"`
+	// Storage Limits
+	MaxNotebooks        int `gorm:"default:3"`  // -1 = unlimited
+	MaxNotesPerNotebook int `gorm:"default:10"` // -1 = unlimited
+	// Daily Usage Limits
+	AiChatDailyLimit         int `gorm:"default:0"` // 0 = disabled, -1 = unlimited
+	SemanticSearchDailyLimit int `gorm:"default:0"` // 0 = disabled, -1 = unlimited
+	// Feature Flags (backward compatibility)
+	SemanticSearchEnabled bool `gorm:"default:false"`
+	AiChatEnabled         bool `gorm:"default:false"`
+	// Display Settings
+	IsMostPopular bool `gorm:"default:false"`
+	IsActive      bool `gorm:"default:true"`
+	SortOrder     int  `gorm:"default:0"`
+
+	// Relations
+	Features []*Feature `gorm:"many2many:subscription_plan_features;joinForeignKey:plan_id;joinReferences:feature_id"`
+}
+
+func (SubscriptionPlan) TableName() string {
+	return "subscription_plans"
+}
+
+type UserSubscription struct {
+	Id                    uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId                uuid.UUID  `gorm:"type:uuid;not null;index"`
+	PlanId                uuid.UUID  `gorm:"type:uuid;not null;index"`
+	BillingAddressId      *uuid.UUID `gorm:"type:uuid;index"`
+	Status                string     `gorm:"type:varchar(50);not null"`
+	CurrentPeriodStart    time.Time  `gorm:"not null"`
+	CurrentPeriodEnd      time.Time  `gorm:"not null"`
+	PaymentStatus         string     `gorm:"type:varchar(50);not null"`
+	MidtransTransactionId *string    `gorm:"type:varchar(255)"`
+	CreatedAt             time.Time  `gorm:"autoCreateTime"`
+	UpdatedAt             time.Time  `gorm:"autoUpdateTime"`
+}
+
+func (UserSubscription) TableName() string {
+	return "user_subscriptions"
+}
+
+
+
+>>> FILE: subscription_plan_feature_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type SubscriptionPlanFeature struct {
+	PlanId    uuid.UUID `gorm:"type:uuid;primaryKey"`
+	FeatureId uuid.UUID `gorm:"type:uuid;primaryKey"`
+	CreatedAt time.Time `gorm:"default:now()"`
+}
+
+func (SubscriptionPlanFeature) TableName() string {
+	return "subscription_plan_features"
+}
+
+
+
+>>> FILE: system_log_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type SystemLog struct {
+	Id        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Level     string    `gorm:"type:varchar(20);not null;index"`
+	Module    *string   `gorm:"type:varchar(50)"`
+	Message   string    `gorm:"type:text;not null"`
+	Details   *string   `gorm:"type:jsonb"`
+	CreatedAt time.Time `gorm:"default:now();not null;index"`
+}
+
+func (SystemLog) TableName() string {
+	return "system_logs"
+}
+
+
+
+>>> FILE: user_billing_address_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type UserBillingAddress struct {
+	Id           uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId       uuid.UUID `gorm:"type:uuid;not null;index"`
+	FirstName    string    `gorm:"type:text;not null"`
+	LastName     string    `gorm:"type:text;not null"`
+	Email        string    `gorm:"type:text;not null"`
+	Phone        *string   `gorm:"type:text"`
+	AddressLine1 string    `gorm:"type:text;not null"`
+	AddressLine2 *string   `gorm:"type:text"`
+	City         string    `gorm:"type:text;not null"`
+	State        string    `gorm:"type:text;not null"`
+	PostalCode   string    `gorm:"type:text;not null"`
+	Country      string    `gorm:"type:text;default:'Indonesia';not null"`
+	IsDefault    bool      `gorm:"default:false"`
+	CreatedAt    time.Time `gorm:"default:now();not null"`
+	UpdatedAt    time.Time `gorm:"default:now();not null"`
+}
+
+func (UserBillingAddress) TableName() string {
+	return "user_billing_addresses"
+}
+
+
+
+>>> FILE: user_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type User struct {
+	Id                    uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Email                 string         `gorm:"type:varchar(255);uniqueIndex;not null"`
+	PasswordHash          *string        `gorm:"type:varchar(255)"`
+	FullName              string         `gorm:"type:varchar(255);not null"`
+	Role                  string         `gorm:"type:varchar(50);not null;default:'user'"`
+	Status                string         `gorm:"type:varchar(50);not null;default:'pending'"`
+	EmailVerified         bool           `gorm:"default:false"`
+	EmailVerifiedAt       *time.Time     
+	AvatarURL             *string        `gorm:"type:text"`
+	AiDailyUsage          int            `gorm:"default:0"`
+	AiDailyUsageLastReset time.Time      
+	CreatedAt             time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt             time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt             gorm.DeletedAt `gorm:"index"`
+}
+
+func (User) TableName() string {
+	return "users"
+}
+
+type PasswordResetToken struct {
+	Id        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId    uuid.UUID `gorm:"type:uuid;not null;index"`
+	Token     string    `gorm:"type:varchar(255);not null;index"`
+	ExpiresAt time.Time `gorm:"not null"`
+	Used      bool      `gorm:"default:false"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+}
+
+func (PasswordResetToken) TableName() string {
+	return "password_reset_tokens"
+}
+
+type UserProvider struct {
+	Id             uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId         uuid.UUID `gorm:"type:uuid;not null;index"`
+	ProviderName   string    `gorm:"type:varchar(50);not null"`
+	ProviderUserId string    `gorm:"type:varchar(255);not null"`
+	AvatarURL      string    `gorm:"type:text"`
+	CreatedAt      time.Time `gorm:"autoCreateTime"`
+}
+
+func (UserProvider) TableName() string {
+	return "user_providers"
+}
+
+type EmailVerificationToken struct {
+	Id        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId    uuid.UUID `gorm:"type:uuid;not null;index"`
+	Token     string    `gorm:"type:varchar(255);not null;index"`
+	ExpiresAt time.Time `gorm:"not null"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+}
+
+func (EmailVerificationToken) TableName() string {
+	return "email_verification_tokens"
+}
+
+type UserRefreshToken struct {
+	Id        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId    uuid.UUID `gorm:"type:uuid;not null;index"`
+	TokenHash string    `gorm:"type:text;not null"`
+	ExpiresAt time.Time `gorm:"not null"`
+	Revoked   bool      `gorm:"default:false"`
+	IpAddress string    `gorm:"type:varchar(45)"`
+	UserAgent string    `gorm:"type:text"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+}
+
+func (UserRefreshToken) TableName() string {
+	return "user_refresh_tokens"
+}
+
+>>> FILE: ai_credit_transaction_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type AiCreditTransaction struct {
+	Id              uuid.UUID  `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()"`
+	UserId          uuid.UUID  `gorm:"type:uuid;not null;index"`
+	TransactionType string     `gorm:"type:ai_credit_transaction_type;not null"`
+	Amount          int        `gorm:"not null"`
+	ServiceUsed     *string    `gorm:"type:text;index"`
+	RelatedId       *uuid.UUID `gorm:"type:uuid"`
+	Notes           *string    `gorm:"type:text"`
+	CreatedAt       time.Time  `gorm:"default:now();not null"`
+}
+
+func (AiCreditTransaction) TableName() string {
+	return "ai_credit_transactions"
+}
+
+
+
+>>> FILE: billing_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type BillingAddress struct {
+	Id           uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId       uuid.UUID `gorm:"type:uuid;not null;index"`
+	FirstName    string    `gorm:"type:varchar(255);not null"`
+	LastName     string    `gorm:"type:varchar(255);not null"`
+	Email        string    `gorm:"type:varchar(255);not null"`
+	Phone        string    `gorm:"type:varchar(50)"`
+	AddressLine1 string    `gorm:"type:varchar(255);not null"`
+	AddressLine2 string    `gorm:"type:varchar(255)"`
+	City         string    `gorm:"type:varchar(255);not null"`
+	State        string    `gorm:"type:varchar(255);not null"`
+	PostalCode   string    `gorm:"type:varchar(20);not null"`
+	Country      string    `gorm:"type:varchar(255);not null"`
+	IsDefault    bool      `gorm:"default:false"`
+	CreatedAt    time.Time `gorm:"autoCreateTime"`
+	UpdatedAt    time.Time `gorm:"autoUpdateTime"`
+}
+
+func (BillingAddress) TableName() string {
+	return "billing_addresses"
+}
+
+
+
+>>> FILE: chat_message_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type ChatMessage struct {
+	Id            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Chat          string         `gorm:"type:text;not null"`
+	Role          string         `gorm:"type:varchar(50);not null"`
+	ChatSessionId uuid.UUID      `gorm:"type:uuid;not null;index"`
+	CreatedAt     time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt     time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt     gorm.DeletedAt `gorm:"index"`
+}
+
+func (ChatMessage) TableName() string {
+	return "chat_messages"
+}
+
+
+
+>>> FILE: chat_message_raw_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type ChatMessageRaw struct {
+	Id            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Chat          string         `gorm:"type:text;not null"`
+	Role          string         `gorm:"type:varchar(50);not null"`
+	ChatSessionId uuid.UUID      `gorm:"type:uuid;not null;index"`
+	CreatedAt     time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt     time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt     gorm.DeletedAt `gorm:"index"`
+}
+
+func (ChatMessageRaw) TableName() string {
+	return "chat_messages_raw"
+}
+
+
+
+>>> FILE: chat_session_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type ChatSession struct {
+	Id        uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId    uuid.UUID      `gorm:"type:uuid;not null;index"` // User ownership for data isolation
+	Title     string         `gorm:"type:varchar(255);not null"`
+	CreatedAt time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+}
+
+func (ChatSession) TableName() string {
+	return "chat_sessions"
+}
+
+
+
+>>> FILE: feature_model.go
+// FILE: internal/model/feature_model.go
+// GORM model for the features (master catalog) table
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+// Feature represents a feature in the master catalog
+type Feature struct {
+	Id          uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Key         string    `gorm:"type:varchar(100);uniqueIndex;not null"`
+	Name        string    `gorm:"type:varchar(255);not null"`
+	Description string    `gorm:"type:text"`
+	Category    string    `gorm:"type:varchar(50)"` // ai, storage, support, export
+	IsActive    bool      `gorm:"default:true"`
+	SortOrder   int       `gorm:"default:0"`
+	CreatedAt   time.Time `gorm:"autoCreateTime"`
+	UpdatedAt   time.Time `gorm:"autoUpdateTime"`
+}
+
+func (Feature) TableName() string {
+	return "features"
+}
+
+
+
+>>> FILE: notebook_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type Notebook struct {
+	Id        uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name      string         `gorm:"type:varchar(255);not null"`
+	ParentId  *uuid.UUID     `gorm:"type:uuid;index"`
+	UserId    uuid.UUID      `gorm:"type:uuid;not null;index"`
+	CreatedAt time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt gorm.DeletedAt `gorm:"index"`
+}
+
+func (Notebook) TableName() string {
+	return "notebooks"
+}
+
+
+
+>>> FILE: note_embedding_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"github.com/pgvector/pgvector-go"
+	"gorm.io/gorm"
+)
+
+type NoteEmbedding struct {
+	Id             uuid.UUID       `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Document       string          `gorm:"type:text"`
+	EmbeddingValue pgvector.Vector `gorm:"type:vector(768)"` // Gemini text-embedding-004 uses 768 dimensions
+	NoteId         uuid.UUID       `gorm:"type:uuid;not null;index"`
+	CreatedAt      time.Time       `gorm:"autoCreateTime"`
+	UpdatedAt      time.Time       `gorm:"autoUpdateTime"`
+	DeletedAt      gorm.DeletedAt  `gorm:"index"`
+}
+
+func (NoteEmbedding) TableName() string {
+	return "note_embeddings"
+}
+
+
+
+>>> FILE: note_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type Note struct {
+	Id         uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Title      string         `gorm:"type:varchar(255);not null"`
+	Content    string         `gorm:"type:text"`
+	NotebookId uuid.UUID      `gorm:"type:uuid;not null;index"`
+	UserId     uuid.UUID      `gorm:"type:uuid;not null;index"`
+	CreatedAt  time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt  time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt  gorm.DeletedAt `gorm:"index"`
+}
+
+func (Note) TableName() string {
+	return "notes"
+}
+
+
+
+>>> FILE: refund_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type Refund struct {
+	ID             uuid.UUID `gorm:"type:uuid;default:gen_random_uuid();primaryKey"`
+	SubscriptionID uuid.UUID `gorm:"type:uuid;not null"`
+	UserID         uuid.UUID `gorm:"type:uuid;not null"`
+	Amount         float64   `gorm:"type:decimal(10,2);not null"`
+	Reason         string    `gorm:"type:text"`
+	Status         string    `gorm:"type:varchar(50);default:'pending'"` // pending, approved, rejected
+	AdminNotes     string    `gorm:"type:text"`
+	ProcessedAt    *time.Time
+	CreatedAt      time.Time
+	UpdatedAt      time.Time
+	DeletedAt      gorm.DeletedAt `gorm:"index"`
+
+	// Relations
+	Subscription UserSubscription `gorm:"foreignKey:SubscriptionID"`
+	User         User             `gorm:"foreignKey:UserID"`
+}
+
+func (Refund) TableName() string {
+	return "refunds"
+}
+
+
+
+>>> FILE: subscription_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type SubscriptionPlan struct {
+	Id            uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Name          string    `gorm:"type:varchar(255);not null"`
+	Slug          string    `gorm:"type:varchar(255);uniqueIndex;not null"`
+	Description   string    `gorm:"type:text"`
+	Tagline       string    `gorm:"type:text"` // Subtitle for pricing modal
+	Price         float64   `gorm:"type:decimal(10,2);not null"`
+	TaxRate       float64   `gorm:"type:decimal(5,4);default:0"`
+	BillingPeriod string    `gorm:"type:billing_period;not null"`
+	// Storage Limits
+	MaxNotebooks        int `gorm:"default:3"`  // -1 = unlimited
+	MaxNotesPerNotebook int `gorm:"default:10"` // -1 = unlimited
+	// Daily Usage Limits
+	AiChatDailyLimit         int `gorm:"default:0"` // 0 = disabled, -1 = unlimited
+	SemanticSearchDailyLimit int `gorm:"default:0"` // 0 = disabled, -1 = unlimited
+	// Feature Flags (backward compatibility)
+	SemanticSearchEnabled bool `gorm:"default:false"`
+	AiChatEnabled         bool `gorm:"default:false"`
+	// Display Settings
+	IsMostPopular bool `gorm:"default:false"`
+	IsActive      bool `gorm:"default:true"`
+	SortOrder     int  `gorm:"default:0"`
+
+	// Relations
+	Features []*Feature `gorm:"many2many:subscription_plan_features;joinForeignKey:plan_id;joinReferences:feature_id"`
+}
+
+func (SubscriptionPlan) TableName() string {
+	return "subscription_plans"
+}
+
+type UserSubscription struct {
+	Id                    uuid.UUID  `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId                uuid.UUID  `gorm:"type:uuid;not null;index"`
+	PlanId                uuid.UUID  `gorm:"type:uuid;not null;index"`
+	BillingAddressId      *uuid.UUID `gorm:"type:uuid;index"`
+	Status                string     `gorm:"type:varchar(50);not null"`
+	CurrentPeriodStart    time.Time  `gorm:"not null"`
+	CurrentPeriodEnd      time.Time  `gorm:"not null"`
+	PaymentStatus         string     `gorm:"type:varchar(50);not null"`
+	MidtransTransactionId *string    `gorm:"type:varchar(255)"`
+	CreatedAt             time.Time  `gorm:"autoCreateTime"`
+	UpdatedAt             time.Time  `gorm:"autoUpdateTime"`
+}
+
+func (UserSubscription) TableName() string {
+	return "user_subscriptions"
+}
+
+
+
+>>> FILE: subscription_plan_feature_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type SubscriptionPlanFeature struct {
+	PlanId    uuid.UUID `gorm:"type:uuid;primaryKey"`
+	FeatureId uuid.UUID `gorm:"type:uuid;primaryKey"`
+	CreatedAt time.Time `gorm:"default:now()"`
+}
+
+func (SubscriptionPlanFeature) TableName() string {
+	return "subscription_plan_features"
+}
+
+
+
+>>> FILE: system_log_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type SystemLog struct {
+	Id        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Level     string    `gorm:"type:varchar(20);not null;index"`
+	Module    *string   `gorm:"type:varchar(50)"`
+	Message   string    `gorm:"type:text;not null"`
+	Details   *string   `gorm:"type:jsonb"`
+	CreatedAt time.Time `gorm:"default:now();not null;index"`
+}
+
+func (SystemLog) TableName() string {
+	return "system_logs"
+}
+
+
+
+>>> FILE: user_billing_address_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+)
+
+type UserBillingAddress struct {
+	Id           uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId       uuid.UUID `gorm:"type:uuid;not null;index"`
+	FirstName    string    `gorm:"type:text;not null"`
+	LastName     string    `gorm:"type:text;not null"`
+	Email        string    `gorm:"type:text;not null"`
+	Phone        *string   `gorm:"type:text"`
+	AddressLine1 string    `gorm:"type:text;not null"`
+	AddressLine2 *string   `gorm:"type:text"`
+	City         string    `gorm:"type:text;not null"`
+	State        string    `gorm:"type:text;not null"`
+	PostalCode   string    `gorm:"type:text;not null"`
+	Country      string    `gorm:"type:text;default:'Indonesia';not null"`
+	IsDefault    bool      `gorm:"default:false"`
+	CreatedAt    time.Time `gorm:"default:now();not null"`
+	UpdatedAt    time.Time `gorm:"default:now();not null"`
+}
+
+func (UserBillingAddress) TableName() string {
+	return "user_billing_addresses"
+}
+
+
+
+>>> FILE: user_model.go
+package model
+
+import (
+	"time"
+
+	"github.com/google/uuid"
+	"gorm.io/gorm"
+)
+
+type User struct {
+	Id                    uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Email                 string         `gorm:"type:varchar(255);uniqueIndex;not null"`
+	PasswordHash          *string        `gorm:"type:varchar(255)"`
+	FullName              string         `gorm:"type:varchar(255);not null"`
+	Role                  string         `gorm:"type:varchar(50);not null;default:'user'"`
+	Status                string         `gorm:"type:varchar(50);not null;default:'pending'"`
+	EmailVerified         bool           `gorm:"default:false"`
+	EmailVerifiedAt       *time.Time     
+	AvatarURL             *string        `gorm:"type:text"`
+	AiDailyUsage          int            `gorm:"default:0"`
+	AiDailyUsageLastReset time.Time      
+	CreatedAt             time.Time      `gorm:"autoCreateTime"`
+	UpdatedAt             time.Time      `gorm:"autoUpdateTime"`
+	DeletedAt             gorm.DeletedAt `gorm:"index"`
+}
+
+func (User) TableName() string {
+	return "users"
+}
+
+type PasswordResetToken struct {
+	Id        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId    uuid.UUID `gorm:"type:uuid;not null;index"`
+	Token     string    `gorm:"type:varchar(255);not null;index"`
+	ExpiresAt time.Time `gorm:"not null"`
+	Used      bool      `gorm:"default:false"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+}
+
+func (PasswordResetToken) TableName() string {
+	return "password_reset_tokens"
+}
+
+type UserProvider struct {
+	Id             uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId         uuid.UUID `gorm:"type:uuid;not null;index"`
+	ProviderName   string    `gorm:"type:varchar(50);not null"`
+	ProviderUserId string    `gorm:"type:varchar(255);not null"`
+	AvatarURL      string    `gorm:"type:text"`
+	CreatedAt      time.Time `gorm:"autoCreateTime"`
+}
+
+func (UserProvider) TableName() string {
+	return "user_providers"
+}
+
+type EmailVerificationToken struct {
+	Id        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId    uuid.UUID `gorm:"type:uuid;not null;index"`
+	Token     string    `gorm:"type:varchar(255);not null;index"`
+	ExpiresAt time.Time `gorm:"not null"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+}
+
+func (EmailVerificationToken) TableName() string {
+	return "email_verification_tokens"
+}
+
+type UserRefreshToken struct {
+	Id        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId    uuid.UUID `gorm:"type:uuid;not null;index"`
+	TokenHash string    `gorm:"type:text;not null"`
+	ExpiresAt time.Time `gorm:"not null"`
+	Revoked   bool      `gorm:"default:false"`
+	IpAddress string    `gorm:"type:varchar(45)"`
+	UserAgent string    `gorm:"type:text"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+}
+
+func (UserRefreshToken) TableName() string {
+	return "user_refresh_tokens"
+}
+
+
+
+

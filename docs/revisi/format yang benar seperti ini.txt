@@ -1,0 +1,975 @@
+# Dokumentasi: Backend Alur Sign Up User Credential
+
+**Tanggal Dokumentasi:** 27 Desember 2024  
+**Fokus Domain:** Backend (User Registration API)  
+**Sumber Kebenaran:** Laporan Implementasi Fitur Sign Up User Credential
+
+---
+
+## A. Pengantar Fitur Sign Up Backend
+
+Fitur ini menyediakan mekanisme pendaftaran akun pengguna baru dengan metode tradisional menggunakan email dan password. Sistem menangani seluruh proses registrasi dari validasi keunikan identitas, pengamanan kredensial, hingga inisiasi verifikasi email.
+
+Secara operasional, sistem memvalidasi bahwa email yang didaftarkan belum terdaftar sebelumnya untuk mencegah duplikasi akun. Kredensial password diamankan menggunakan algoritma hashing bcrypt dengan cost factor default yang memberikan keseimbangan antara keamanan dan performa. Akun baru dibuat dengan status Pending dan flag email verified bernilai false.
+
+Untuk memitigasi risiko akun fiktif dan memastikan email yang didaftarkan valid, sistem menerapkan mekanisme verifikasi dua langkah berbasis One-Time Password. Setelah akun berhasil dibuat, sistem secara otomatis menghasilkan kode OTP 6 digit dan mengirimkannya ke alamat email yang terdaftar. Pengguna tidak dapat mengakses fitur utama aplikasi hingga proses verifikasi email berhasil diselesaikan.
+
+---
+
+## B. Alur Data End-to-End
+
+### B.1 Tahapan Proses Request-Response
+
+Alur dimulai ketika HTTP Client mengirimkan request POST ke endpoint /api/auth/register dengan body JSON berisi full_name, email, dan password. Server menerima request ini dan melakukan serangkaian proses yang terstruktur sebelum mengembalikan response.
+
+```
+HTTP Client
+    -> POST /api/auth/register
+    -> Server (Routing & Middleware)
+    -> Controller (Parsing & Validation)
+    -> Service (Business Logic)
+    -> Unit of Work (Transaction Management)
+    -> Repository (Data Access)
+    -> Mapper (Entity to Model)
+    -> Database (Persistence)
+    -> Transaction Commit
+    -> Mailer (Async OTP Delivery)
+    -> Controller (Response Formatting)
+    -> HTTP Client (JSON Response)
+```
+
+*Snippet 1: Alur lengkap pemrosesan request registrasi dari client hingga database.*
+
+Tahap pertama adalah routing dan middleware dimana server Fiber menerima request dan mencocokan path dengan route yang terdaftar. Middleware global seperti CORS dan error handler dieksekusi sebelum request diteruskan ke controller.
+
+Tahap kedua adalah parsing dan validasi di controller. Body JSON di-parse menjadi struktur RegisterRequest dan divalidasi menggunakan tag validator untuk memastikan semua field required ada dan format email valid.
+
+Tahap ketiga adalah eksekusi logika bisnis di service. Service melakukan pemeriksaan keunikan email, hashing password, pembuatan entity User, dan pengelolaan transaksi database.
+
+Tahap keempat adalah persistensi data melalui repository. Repository mengkonversi entity domain menjadi model database dan menyimpannya ke database PostgreSQL menggunakan GORM.
+
+Tahap kelima adalah commit transaksi untuk memastikan semua perubahan data tersimpan secara atomik. Jika ada error di tahap sebelumnya, transaksi akan di-rollback dan data tidak akan tersimpan.
+
+Tahap keenam adalah pengiriman email OTP secara asynchronous. Proses ini dijalankan di goroutine terpisah sehingga tidak memblokir response ke client.
+
+Tahap terakhir adalah formatting response di controller. Controller membungkus data hasil registrasi dalam format JSON standar dengan field success, code, message, dan data.
+
+### B.2 Response Success
+
+Setelah semua tahap berhasil dijalankan, server mengembalikan response JSON dengan format standar yang konsisten.
+
+```json
+{
+   "success": true,
+   "code": 200,
+   "message": "User registered successfully. Check console for OTP.",
+   "data": {
+       "id": "550e8400-e29b-41d4-a716-446655440000",
+       "email": "user@example.com"
+   }
+}
+```
+
+*Snippet 2: Struktur JSON response sukses yang menandakan inisiasi data pengguna baru.*
+
+Field success bernilai true menunjukkan bahwa operasi registrasi berhasil. Field code berisi HTTP status code 200. Field message memberikan informasi kepada client bahwa registrasi berhasil dan OTP telah dikirim. Field data berisi informasi user yang baru dibuat termasuk id yang di-generate oleh database dan email yang didaftarkan.
+
+Response ini menandakan bahwa akun telah dibuat di database dengan status Pending dan email verifikasi telah dikirim. Client kemudian dapat mengarahkan user ke halaman verifikasi untuk memasukkan kode OTP.
+
+---
+
+## C. Arsitektur Backend - 17 Komponen
+
+### C.1 HTTP Server & Route Registration
+
+Komponen ini adalah entry point dari aplikasi backend yang menginisialisasi instance server HTTP menggunakan framework Fiber. Server bertanggung jawab untuk menerima request dari client, menjalankan middleware, dan mengarahkan request ke controller yang sesuai.
+
+Lokasi file adalah internal/server/server.go yang mengimplementasikan fungsi bootstrap server lengkap dengan konfigurasi middleware global. Middleware yang didaftarkan mencakup CORS untuk mengizinkan request dari domain frontend, OpenTelemetry Tracing untuk monitoring, dan Error Handler untuk menangkap panic dan error yang tidak tertangani.
+
+Pada tahap bootstrap, server menerima object Container dari dependency injection yang berisi semua controller yang sudah terinisialisasi dengan dependency masing-masing. Server kemudian memanggil fungsi registerRoutes untuk menghubungkan setiap controller dengan path HTTP yang sesuai.
+
+```go
+func registerRoutes(app *fiber.App, c *bootstrap.Container) {
+	api := app.Group("/api")
+	c.AuthController.RegisterRoutes(api)
+	c.UserController.RegisterRoutes(api)
+	c.OAuthController.RegisterRoutes(api)
+	// ... other controllers
+}
+```
+
+*Snippet 3: Registrasi route controller ke grup API utama.*
+
+Untuk alur Sign Up, AuthController didaftarkan pada grup /api sehingga semua endpoint auth akan memiliki prefix /api/auth. Endpoint /api/auth/register menjadi aktif dan siap menerima request POST dari client.
+
+Server menggunakan port yang dikonfigurasi di environment variable dan menjalankan event loop untuk mendengarkan incoming requests. Setiap request yang masuk akan diproses secara concurrent menggunakan goroutine.
+
+### C.2 Dependency Injection Container
+
+Container adalah komponen yang mengorkestrasi konstruksi dan injeksi dependensi untuk seluruh komponen aplikasi. Container memastikan bahwa setiap komponen menerima dependency yang diperlukan tanpa perlu membuatnya sendiri.
+
+Lokasi file adalah internal/bootstrap/container.go yang mengimplementasikan fungsi NewContainer yang menerima database connection dan config object sebagai parameter.
+
+Container menginisialisasi infrastruktur inti terlebih dahulu. RepositoryFactory dibuat dengan database connection untuk menyediakan akses ke repository. EmailService dibuat dengan konfigurasi SMTP dari config untuk mengirim email verifikasi.
+
+```go
+func NewContainer(db *gorm.DB, cfg *config.Config) *Container {
+	// 1. Core Facades
+	uowFactory := unitofwork.NewRepositoryFactory(db)
+	emailService := mailer.NewEmailService(
+		cfg.SMTP.Host, cfg.SMTP.Port, cfg.SMTP.Email, cfg.SMTP.Password, cfg.SMTP.SenderName,
+	)
+	// 3. Services
+	authService := service.NewAuthService(uowFactory, emailService)
+	// 4. Controllers
+	return &Container{
+		AuthController: controller.NewAuthController(authService),
+		// ...
+	}
+}
+```
+
+*Snippet 4: Konstruksi hierarki dependensi untuk fitur autentikasi.*
+
+Setelah infrastruktur inti siap, container membuat service layer. AuthService diinisialisasi dengan uowFactory untuk akses data dan emailService untuk pengiriman OTP. Service tidak perlu tahu bagaimana cara mengakses database atau mengirim email, cukup menggunakan interface yang disediakan.
+
+Terakhir, container membuat controller layer. AuthController diinisialisasi dengan authService yang sudah siap digunakan. Controller tidak perlu tahu tentang repository atau email service, cukup memanggil method dari service.
+
+Pendekatan ini mengikuti prinsip Dependency Inversion Principle dimana high-level modules tidak bergantung pada low-level modules tetapi bergantung pada abstraksi. Ini memudahkan testing karena dependency dapat di-mock dengan mudah.
+
+### C.3 Data Transfer Object
+
+DTO mendefinisikan kontrak data yang ketat untuk pertukaran informasi antara client dan server. DTO memastikan bahwa data yang dikirim dan diterima memiliki struktur yang valid dan konsisten.
+
+Lokasi file adalah internal/dto/auth_payment_dto.go yang berisi definisi struct untuk request dan response endpoint autentikasi dan payment.
+
+Struktur RegisterRequest mendefinisikan field yang wajib ada dalam body request registrasi. Field full_name harus minimal 3 karakter. Field email harus format email yang valid. Field password harus minimal 8 karakter. Validasi ini diterapkan menggunakan tag validate yang akan diproses oleh validator library.
+
+```go
+type RegisterRequest struct {
+	FullName string `json:"full_name" validate:"required,min=3"`
+	Email    string `json:"email" validate:"required,email"`
+	Password string `json:"password" validate:"required,min=8"`
+}
+```
+
+*Snippet 5: Definisi struktur RegisterRequest dengan aturan validasi.*
+
+Tag json menentukan nama field saat struct di-serialize atau de-serialize dari JSON. Tag validate menentukan aturan validasi yang harus dipenuhi field tersebut.
+
+Struktur RegisterResponse mendefinisikan payload yang dikembalikan ke client setelah registrasi berhasil. Response hanya berisi informasi minimal yaitu id user yang baru dibuat dan email yang didaftarkan.
+
+```go
+type RegisterResponse struct {
+	Id    uuid.UUID `json:"id"`
+	Email string    `json:"email"`
+}
+```
+
+*Snippet 6: Definisi struktur RegisterResponse untuk payload response.*
+
+DTO digunakan eksklusif di layer controller untuk mem-parsing request body dan memformat response. Layer service dan repository tidak menggunakan DTO tetapi menggunakan entity domain.
+
+### C.4 Controller Layer
+
+Controller menangani siklus Request-Response HTTP untuk seluruh endpoint autentikasi. Controller bertanggung jawab untuk menerima request, mem-parsing data, mendelegasikan eksekusi ke service, dan memformat response.
+
+Lokasi file adalah internal/controller/auth_controller.go yang mengimplementasikan interface AuthController dengan method untuk setiap endpoint auth.
+
+Fungsi RegisterRoutes mendaftarkan semua route autentikasi ke router group yang diterima sebagai parameter. Route /auth/register didaftarkan dengan handler Register yang akan dipanggil saat ada request POST ke path tersebut.
+
+```go
+func (c *authController) RegisterRoutes(r fiber.Router) {
+	h := r.Group("/auth")
+	h.Post("/register", c.Register)
+	h.Post("/verify-email", c.VerifyEmail)
+	// ...
+}
+```
+
+*Snippet 7: Pendaftaran route dengan handler method.*
+
+Method Register adalah handler untuk endpoint registrasi. Method ini pertama-tama mem-parsing body JSON menjadi struct RegisterRequest menggunakan BodyParser dari Fiber. Jika parsing gagal, method mengembalikan error yang akan ditangani oleh error handler global.
+
+```go
+func (c *authController) Register(ctx *fiber.Ctx) error {
+	var req dto.RegisterRequest
+	if err := ctx.BodyParser(&req); err != nil {
+		return err
+	}
+	res, err := c.service.Register(ctx.Context(), &req)
+	if err != nil {
+		return ctx.Status(fiber.StatusBadRequest).JSON(fiber.Map{
+			"success": false, "code": 400, "message": err.Error(),
+		})
+	}
+	return ctx.JSON(fiber.Map{
+		"success": true, "code": 200,
+		"message": "User registered successfully. Check console for OTP.",
+		"data": res,
+	})
+}
+```
+
+*Snippet 8: Implementasi handler registrasi dengan parsing dan delegasi.*
+
+Setelah parsing berhasil, controller memanggil method Register dari service dengan meneruskan context dan request object. Service akan mengembalikan response data atau error.
+
+Jika service mengembalikan error, controller membuat response error dengan status code 400 Bad Request dan message yang menjelaskan error. Jika service berhasil, controller membuat response success dengan status code 200 dan data user yang baru dibuat.
+
+Response dibuat menggunakan fiber.Map yang akan otomatis di-serialize menjadi JSON. Format response konsisten dengan field success, code, message, dan data di semua endpoint.
+
+### C.5 Service Layer
+
+Service mengenkapsulasi inti logika pendaftaran dan mengoordinasikan serangkaian operasi yang kompleks. Service adalah tempat dimana business logic berada dan business rules diterapkan.
+
+Lokasi file adalah internal/service/auth_service.go yang mengimplementasikan interface AuthService dengan method untuk semua operasi autentikasi.
+
+Method Register menerima context dan RegisterRequest sebagai parameter, kemudian mengembalikan RegisterResponse atau error. Method ini menjalankan tujuh tahap operasi secara berurutan untuk memastikan proses registrasi berjalan dengan benar.
+
+```go
+func (s *authService) Register(ctx context.Context, req *dto.RegisterRequest) (*dto.RegisterResponse, error) {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+```
+
+*Snippet 9: Inisialisasi Unit of Work untuk operasi database.*
+
+Tahap pertama adalah membuat instance Unit of Work yang akan digunakan untuk semua operasi database dalam request ini. Unit of Work memberikan akses ke repository dan mengelola transaksi.
+
+Tahap kedua adalah validasi keunikan email. Service menggunakan UserRepository untuk mencari user yang sudah terdaftar dengan email yang sama menggunakan specification ByEmail.
+
+```go
+	// 1. Check for existing user
+	existing, _ := uow.UserRepository().FindOne(ctx, specification.ByEmail{Email: req.Email})
+	if existing != nil {
+		return nil, errors.New("email already registered")
+	}
+```
+
+*Snippet 10: Validasi keunikan email sebelum membuat akun baru.*
+
+Jika ditemukan user dengan email yang sama, method mengembalikan error dengan message yang jelas. Ini mencegah duplikasi akun dan memberikan feedback yang berguna kepada user.
+
+Tahap ketiga adalah hashing password menggunakan bcrypt. Password plaintext dari request di-hash dengan default cost factor 10 yang memberikan keseimbangan antara keamanan dan performa.
+
+```go
+	// 2. Hash password
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil { return nil, err }
+	hashStr := string(hash)
+```
+
+*Snippet 11: Hashing password dengan bcrypt untuk keamanan.*
+
+Hash yang dihasilkan adalah string yang akan disimpan di database. Password plaintext tidak pernah disimpan untuk menjaga keamanan data user.
+
+Tahap keempat adalah membuat entity User baru dengan semua field yang diperlukan. Entity dibuat dengan id yang di-generate menggunakan uuid.New(), email dan full_name dari request, password hash yang sudah dibuat, role default User, status Pending, dan email verified false.
+
+```go
+	// 3. Create User Entity
+	user := &entity.User{
+		Id: uuid.New(), 
+		Email: req.Email, 
+		FullName: req.FullName,
+		PasswordHash: &hashStr, 
+		Role: entity.UserRoleUser,
+		Status: entity.UserStatusPending, 
+		EmailVerified: false,
+	}
+```
+
+*Snippet 12: Konstruksi entity User baru dengan status Pending.*
+
+Status Pending menandakan bahwa akun telah dibuat tetapi belum diverifikasi. User dengan status Pending tidak dapat login hingga mereka memverifikasi email.
+
+Tahap kelima adalah memulai transaksi database. Unit of Work menyediakan method Begin yang memulai transaksi GORM. Semua operasi database setelah Begin akan menjadi bagian dari transaksi yang sama.
+
+```go
+	// 4. Begin Transaction
+	if err := uow.Begin(ctx); err != nil { return nil, err }
+	defer uow.Rollback()
+```
+
+*Snippet 13: Memulai transaksi database dengan defer rollback.*
+
+Defer rollback memastikan bahwa jika terjadi error di tahap selanjutnya dan method return sebelum commit, transaksi akan otomatis di-rollback. Ini menjaga konsistensi data.
+
+Tahap keenam adalah persistensi data user dan token verifikasi. Service memanggil method Create dari UserRepository untuk menyimpan user ke database, kemudian memanggil CreateEmailVerificationToken untuk menyimpan token OTP.
+
+```go
+	// 5. Persist User & OTP Token
+	if err := uow.UserRepository().Create(ctx, user); err != nil { return nil, err }
+	
+	// Generate OTP token
+	otpCode := generateOTPCode() // 6 digit random number
+	verificationToken := &entity.EmailVerificationToken{
+		Id: uuid.New(),
+		UserId: user.Id,
+		Token: otpCode,
+		ExpiresAt: time.Now().Add(15 * time.Minute),
+		CreatedAt: time.Now(),
+	}
+	
+	if err := uow.UserRepository().CreateEmailVerificationToken(ctx, verificationToken); err != nil { 
+		return nil, err 
+	}
+```
+
+*Snippet 14: Persistensi user dan token verifikasi dalam satu transaksi.*
+
+Token OTP adalah 6 digit angka random yang di-generate secara aman. Token disimpan dengan masa berlaku 15 menit dari waktu pembuatan. Setelah 15 menit, token tidak dapat digunakan untuk verifikasi.
+
+Tahap ketujuh adalah commit transaksi. Jika semua operasi sebelumnya berhasil, transaksi di-commit untuk menyimpan perubahan secara permanen ke database.
+
+```go
+	// 6. Commit Transaction
+	if err := uow.Commit(); err != nil { return nil, err }
+```
+
+*Snippet 15: Commit transaksi setelah semua operasi berhasil.*
+
+Tahap kedelapan adalah pengiriman email OTP secara asynchronous. Service memanggil method SendOTP dari emailService di dalam goroutine sehingga eksekusi tidak memblokir return response ke client.
+
+```go
+	// 7. Async Email Delivery
+	go func() { 
+		if err := s.emailService.SendOTP(user.Email, otpCode); err != nil {
+			log.Printf("Failed to send OTP email: %v", err)
+		}
+	}()
+	
+	return &dto.RegisterResponse{Id: user.Id, Email: user.Email}, nil
+}
+```
+
+*Snippet 16: Pengiriman email OTP secara asynchronous tanpa memblokir response.*
+
+Goroutine akan berjalan di background dan mengirim email setelah response dikembalikan ke client. Jika pengiriman email gagal, error hanya di-log dan tidak mempengaruhi keberhasilan registrasi.
+
+Method mengembalikan RegisterResponse yang berisi id dan email user yang baru dibuat. Response ini akan dibungkus oleh controller dalam format JSON standar.
+
+### C.6 Repository Factory Interface
+
+Interface ini mendefinisikan kontrak untuk pembuatan instance Unit of Work. Factory pattern digunakan untuk mengabstraksi proses pembuatan object dan memberikan kontrol terhadap lifecycle object.
+
+Lokasi file adalah internal/repository/unitofwork/repository_factory.go yang berisi definisi interface RepositoryFactory.
+
+```go
+type RepositoryFactory interface {
+	NewUnitOfWork(ctx context.Context) UnitOfWork
+}
+```
+
+*Snippet 17: Interface factory untuk pembuatan Unit of Work.*
+
+Interface ini hanya memiliki satu method NewUnitOfWork yang menerima context dan mengembalikan instance UnitOfWork baru. Context digunakan untuk propagasi timeout dan cancellation signal.
+
+Pendekatan factory memungkinkan service layer untuk mendapatkan instance Unit of Work yang terisolasi per-request tanpa perlu mengetahui detail implementasi koneksi database atau bagaimana repository diinisialisasi.
+
+### C.7 Repository Factory Implementation
+
+Implementation ini mengimplementasikan interface RepositoryFactory dengan menyimpan referensi ke database connection dan menggunakan referensi tersebut untuk membuat Unit of Work.
+
+Lokasi file adalah internal/repository/unitofwork/repository_factory_impl.go yang berisi struct dan method implementasi factory.
+
+```go
+type RepositoryFactoryImpl struct {
+	db *gorm.DB
+}
+
+func NewRepositoryFactory(db *gorm.DB) RepositoryFactory {
+	return &RepositoryFactoryImpl{db: db}
+}
+
+func (f *RepositoryFactoryImpl) NewUnitOfWork(ctx context.Context) UnitOfWork {
+	return NewUnitOfWork(f.db)
+}
+```
+
+*Snippet 18: Implementasi factory yang mengenkapsulasi koneksi database.*
+
+Struct RepositoryFactoryImpl menyimpan pointer ke gorm.DB yang merupakan database connection pool. Constructor NewRepositoryFactory menerima database connection dan mengembalikan instance factory.
+
+Method NewUnitOfWork membuat instance UnitOfWork baru setiap kali dipanggil. Setiap Unit of Work bersifat short-lived dan hanya digunakan untuk satu request. Ini memastikan isolasi transaksi antar request.
+
+### C.8 Unit of Work Interface
+
+Interface ini mendefinisikan kontrak untuk pola Unit of Work yang mengelola transaksi database dan menyediakan akses terpusat ke semua repository.
+
+Lokasi file adalah internal/repository/unitofwork/unit_of_work.go yang berisi definisi interface UnitOfWork.
+
+```go
+type UnitOfWork interface {
+	Begin(ctx context.Context) error
+	Commit() error
+	Rollback() error
+	UserRepository() contract.UserRepository
+	NotebookRepository() contract.NotebookRepository
+	NoteRepository() contract.NoteRepository
+	// ... other repositories
+}
+```
+
+*Snippet 19: Interface Unit of Work untuk manajemen transaksi dan akses repository.*
+
+Interface ini mendeklarasikan tiga method transaksional yaitu Begin untuk memulai transaksi, Commit untuk menyimpan perubahan, dan Rollback untuk membatalkan perubahan.
+
+Interface juga mendeklarasikan accessor method untuk setiap repository domain. Method ini mengembalikan instance repository yang terhubung ke transaksi aktif jika ada, atau koneksi database biasa jika tidak ada transaksi.
+
+Pola Unit of Work memastikan bahwa semua operasi dalam satu business transaction menggunakan transaksi database yang sama. Ini menjamin atomicity dimana semua operasi berhasil atau semua gagal.
+
+### C.9 Unit of Work Implementation
+
+Implementation ini mengimplementasikan interface Unit of Work menggunakan mekanisme transaksi GORM. Implementation mengelola state transaksi dan menyediakan akses ke repository.
+
+Lokasi file adalah internal/repository/unitofwork/unit_of_work_impl.go yang berisi struct dan method implementasi Unit of Work.
+
+Struct UnitOfWorkImpl menyimpan dua pointer yaitu db yang merupakan koneksi database dan tx yang merupakan transaksi aktif. Field tx bernilai nil jika tidak ada transaksi yang sedang berjalan.
+
+Method Begin memulai transaksi baru menggunakan GORM. Method ini memeriksa apakah sudah ada transaksi yang aktif untuk mencegah nested transaction yang tidak disengaja.
+
+```go
+func (u *UnitOfWorkImpl) Begin(ctx context.Context) error {
+	if u.tx != nil { 
+		return fmt.Errorf("transaction already started") 
+	}
+	u.tx = u.db.WithContext(ctx).Begin()
+	return u.tx.Error
+}
+```
+
+*Snippet 20: Implementasi Begin untuk memulai transaksi database.*
+
+Method Commit menyimpan semua perubahan yang dilakukan dalam transaksi. Setelah commit, field tx di-set ke nil untuk menandakan transaksi sudah selesai.
+
+```go
+func (u *UnitOfWorkImpl) Commit() error {
+	if u.tx == nil { 
+		return fmt.Errorf("no transaction to commit") 
+	}
+	err := u.tx.Commit().Error
+	u.tx = nil
+	return err
+}
+```
+
+*Snippet 21: Implementasi Commit untuk menyimpan perubahan transaksi.*
+
+Method Rollback membatalkan semua perubahan yang dilakukan dalam transaksi. Method ini biasanya dipanggil dalam defer statement untuk memastikan rollback otomatis jika terjadi error.
+
+Accessor method seperti UserRepository mengembalikan instance repository yang menggunakan transaksi aktif jika ada, atau koneksi database biasa jika tidak ada transaksi.
+
+```go
+func (u *UnitOfWorkImpl) UserRepository() contract.UserRepository {
+	return implementation.NewUserRepository(u.getDB())
+}
+
+func (u *UnitOfWorkImpl) getDB() *gorm.DB {
+	if u.tx != nil {
+		return u.tx
+	}
+	return u.db
+}
+```
+
+*Snippet 22: Accessor repository yang menggunakan transaksi atau koneksi biasa.*
+
+Helper method getDB mengembalikan transaksi jika aktif, atau koneksi database biasa jika tidak. Ini memastikan repository selalu menggunakan connection yang sesuai dengan context saat ini.
+
+### C.10 Repository Interface
+
+Interface ini mendefinisikan kontrak untuk seluruh operasi data terkait entitas User dan token-token terkait. Interface memisahkan business logic dari implementation detail akses database.
+
+Lokasi file adalah internal/repository/contract/user_repository.go yang berisi definisi interface UserRepository.
+
+```go
+type UserRepository interface {
+	Create(ctx context.Context, user *entity.User) error
+	FindOne(ctx context.Context, specs ...specification.Specification) (*entity.User, error)
+	
+	// Token Management
+	CreateEmailVerificationToken(ctx context.Context, token *entity.EmailVerificationToken) error
+	FindEmailVerificationToken(ctx context.Context, specs ...specification.Specification) (*entity.EmailVerificationToken, error)
+	DeleteEmailVerificationToken(ctx context.Context, id uuid.UUID) error
+	
+	// Business Specific
+	ActivateUser(ctx context.Context, userId uuid.UUID) error
+	// ...
+}
+```
+
+*Snippet 23: Kontrak repository untuk akses data User dan Token.*
+
+Interface mendeklarasikan method CRUD standar seperti Create untuk menyimpan user baru, FindOne untuk mencari user berdasarkan kriteria, Update untuk memperbarui data user, dan Delete untuk menghapus user.
+
+Interface juga mendeklarasikan method spesifik untuk token management seperti CreateEmailVerificationToken untuk menyimpan token verifikasi, FindEmailVerificationToken untuk mencari token, dan DeleteEmailVerificationToken untuk menghapus token setelah digunakan.
+
+Method business specific seperti ActivateUser mengenkapsulasi operasi bisnis yang kompleks. Method ini mengubah status user dari Pending menjadi Active dan mengset flag email_verified menjadi true.
+
+Method FindOne menerima parameter variadic specifications yang memungkinkan query filtering yang fleksibel tanpa perlu mendefinisikan method findByEmail, findById, dll secara terpisah.
+
+### C.11 Specification Pattern Interface
+
+Interface ini mendefinisikan kontrak dasar untuk pola Specification yang digunakan untuk membangun query database secara deklaratif dan komposable.
+
+Lokasi file adalah internal/repository/specification/specification.go yang berisi definisi interface Specification.
+
+```go
+type Specification interface {
+	Apply(db *gorm.DB) *gorm.DB
+}
+```
+
+*Snippet 24: Interface dasar untuk pola Specification.*
+
+Interface ini hanya memiliki satu method Apply yang menerima query GORM dan mengembalikan query yang sudah dimodifikasi dengan kondisi filter tertentu.
+
+Pola Specification memisahkan logika query dari repository implementation. Setiap specification mengenkapsulasi satu kondisi filter yang dapat dikombinasikan dengan specification lain untuk membuat query yang kompleks.
+
+Pendekatan ini mengikuti prinsip Open-Closed Principle dimana repository terbuka untuk ekstensi dengan specification baru tetapi tertutup untuk modifikasi.
+
+### C.12 User Specifications
+
+File ini menyediakan implementasi specification khusus untuk domain User. Setiap specification mengimplementasikan interface Specification dan menambahkan kondisi filter spesifik.
+
+Lokasi file adalah internal/repository/specification/user_specifications.go yang berisi struct dan method untuk berbagai specification user.
+
+Specification ByEmail menambahkan filter berdasarkan alamat email. Specification ini digunakan untuk mencari user dengan email tertentu.
+
+```go
+type ByEmail struct { Email string }
+
+func (s ByEmail) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("email = ?", s.Email)
+}
+```
+
+*Snippet 25: Specification untuk filter berdasarkan email.*
+
+Specification UserOwnedBy menambahkan filter berdasarkan user_id. Specification ini digunakan untuk mencari token atau resource lain yang dimiliki oleh user tertentu.
+
+```go
+type UserOwnedBy struct { UserID uuid.UUID }
+
+func (s UserOwnedBy) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("user_id = ?", s.UserID)
+}
+```
+
+*Snippet 26: Specification untuk filter berdasarkan user_id.*
+
+Specification ByToken menambahkan filter berdasarkan nilai token. Specification ini digunakan untuk mencari email verification token atau refresh token dengan nilai tertentu.
+
+```go
+type ByToken struct { Token string }
+
+func (s ByToken) Apply(db *gorm.DB) *gorm.DB {
+	return db.Where("token = ?", s.Token)
+}
+```
+
+*Snippet 27: Specification untuk filter berdasarkan token value.*
+
+Specification dapat dikombinasikan dengan passing multiple specification ke method FindOne atau FindAll. Repository akan menerapkan semua specification secara berurutan untuk membangun query yang kompleks.
+
+### C.13 Repository Implementation
+
+Implementation ini mengimplementasikan interface UserRepository menggunakan GORM sebagai ORM. Implementation menangani transformasi antara entity domain dan model database.
+
+Lokasi file adalah internal/repository/implementation/user_repository_impl.go yang berisi struct dan method implementasi repository.
+
+Struct UserRepositoryImpl menyimpan pointer ke database connection dan instance mapper. Mapper digunakan untuk mentransformasi antara entity dan model.
+
+Method Create menerima entity User dari service, mengkonversinya ke model database menggunakan mapper, mempersistenkan ke database menggunakan GORM, kemudian mengupdate entity dengan data yang di-generate database seperti timestamps.
+
+```go
+func (r *UserRepositoryImpl) Create(ctx context.Context, user *entity.User) error {
+	modelUser := r.mapper.ToModel(user)
+	if err := r.db.WithContext(ctx).Create(modelUser).Error; err != nil {
+		return err
+	}
+	*user = *r.mapper.ToEntity(modelUser)
+	return nil
+}
+```
+
+*Snippet 28: Implementasi Create dengan transformasi entity ke model.*
+
+Method CreateEmailVerificationToken mengikuti pola yang sama untuk menyimpan token verifikasi. Token dikonversi dari entity ke model, disimpan ke database, dan error dikembalikan jika ada.
+
+```go
+func (r *UserRepositoryImpl) CreateEmailVerificationToken(ctx context.Context, token *entity.EmailVerificationToken) error {
+	m := r.mapper.EmailVerificationTokenToModel(token)
+	if err := r.db.WithContext(ctx).Create(m).Error; err != nil {
+		return err
+	}
+	return nil
+}
+```
+
+*Snippet 29: Implementasi CreateEmailVerificationToken untuk menyimpan token OTP.*
+
+Method FindOne menggunakan specifications untuk membangun query. Method ini menerapkan semua specification yang diterima, mengeksekusi query dengan First, dan mengkonversi model hasil query menjadi entity.
+
+```go
+func (r *UserRepositoryImpl) FindOne(ctx context.Context, specs ...specification.Specification) (*entity.User, error) {
+	var modelUser model.User
+	query := r.applySpecifications(r.db.WithContext(ctx), specs...)
+	if err := query.First(&modelUser).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) { 
+			return nil, nil 
+		}
+		return nil, err
+	}
+	return r.mapper.ToEntity(&modelUser), nil
+}
+```
+
+*Snippet 30: Implementasi FindOne dengan specification pattern.*
+
+Helper method applySpecifications melakukan iterasi semua specification dan memanggil method Apply untuk setiap specification. Query yang dikembalikan adalah hasil akumulasi dari semua filter.
+
+Method menangani error ErrRecordNotFound dengan mengembalikan nil tanpa error untuk membedakan antara record tidak ditemukan dan error database actual.
+
+### C.14 Domain Entity
+
+File ini mendefinisikan struktur data domain yang merepresentasikan konsep bisnis dalam aplikasi. Entity adalah pure domain object yang tidak memiliki dependency ke infrastructure.
+
+Lokasi file adalah internal/entity/user_entity.go yang berisi definisi entity User dan token-token terkait.
+
+Entity User menyimpan semua atribut yang merepresentasikan user dalam domain bisnis. Field Id adalah unique identifier, Email adalah alamat email user, PasswordHash adalah hash dari password, FullName adalah nama lengkap, Role menentukan peran user, Status menentukan kondisi akun, dan EmailVerified menandakan apakah email sudah diverifikasi.
+
+```go
+type UserRole string
+type UserStatus string
+
+const (
+	UserRoleUser  UserRole = "user"
+	UserRoleAdmin UserRole = "admin"
+	
+	UserStatusPending UserStatus = "pending"
+	UserStatusActive  UserStatus = "active"
+	UserStatusBlocked UserStatus = "blocked"
+)
+
+type User struct {
+	Id            uuid.UUID
+	Email         string
+	PasswordHash  *string
+	FullName      string
+	Role          UserRole
+	Status        UserStatus
+	EmailVerified bool
+	// ...
+}
+```
+
+*Snippet 31: Definisi entity User dengan enum untuk Role dan Status.*
+
+Enum UserRole dan UserStatus didefinisikan sebagai custom type string dengan constant values. Ini memberikan type safety untuk field yang memiliki nilai terbatas.
+
+Entity EmailVerificationToken merepresentasikan token OTP yang dikirim ke email user untuk verifikasi. Token memiliki masa berlaku yang ditentukan oleh field ExpiresAt.
+
+```go
+type EmailVerificationToken struct {
+	Id        uuid.UUID
+	UserId    uuid.UUID
+	Token     string
+	ExpiresAt time.Time
+	CreatedAt time.Time
+}
+```
+
+*Snippet 32: Definisi entity EmailVerificationToken untuk OTP.*
+
+Entity digunakan eksklusif di layer service dan repository. Layer controller menggunakan DTO, dan layer infrastructure menggunakan model. Pemisahan ini menjaga kemurnian domain dari concern presentation dan persistence.
+
+### C.15 Database Model
+
+File ini mendefinisikan struktur data yang dipetakan langsung ke tabel database. Model berisi konfigurasi ORM untuk mapping struct ke table schema.
+
+Lokasi file adalah internal/model/user_model.go yang berisi definisi model User dan token-token terkait.
+
+Model User dipetakan ke tabel users dengan konfigurasi lengkap untuk setiap kolom. Tag gorm menentukan tipe data SQL, constraints, indexes, dan default values.
+
+```go
+type User struct {
+	Id            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Email         string         `gorm:"type:varchar(255);uniqueIndex;not null"`
+	PasswordHash  *string        `gorm:"type:varchar(255)"`
+	FullName      string         `gorm:"type:varchar(255);not null"`
+	Role          string         `gorm:"type:varchar(50);not null;default:'user'"`
+	Status        string         `gorm:"type:varchar(50);not null;default:'pending'"`
+	EmailVerified bool           `gorm:"default:false"`
+	// ...
+}
+
+func (User) TableName() string { return "users" }
+```
+
+*Snippet 33: Model User dengan mapping lengkap ke tabel database.*
+
+Field Id menggunakan type uuid dengan default value gen_random_uuid yang di-generate oleh PostgreSQL. Field Email memiliki uniqueIndex untuk memastikan tidak ada duplikasi dan not null constraint.
+
+Field Role dan Status menggunakan type varchar dengan default values. Default values ini akan digunakan jika field tidak diset saat insert.
+
+Method TableName mengembalikan nama tabel yang eksplisit. Tanpa method ini, GORM akan menggunakan nama struct dengan pluralization otomatis yang mungkin tidak sesuai.
+
+Model EmailVerificationToken dipetakan ke tabel email_verification_tokens dengan konfigurasi yang sesuai untuk token OTP.
+
+```go
+type EmailVerificationToken struct {
+	Id        uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	UserId    uuid.UUID `gorm:"type:uuid;not null;index"`
+	Token     string    `gorm:"type:varchar(255);not null;index"`
+	ExpiresAt time.Time `gorm:"not null"`
+	CreatedAt time.Time `gorm:"autoCreateTime"`
+}
+
+func (EmailVerificationToken) TableName() string { 
+	return "email_verification_tokens" 
+}
+```
+
+*Snippet 34: Model EmailVerificationToken dengan indexes untuk query performance.*
+
+Field UserId dan Token memiliki index untuk mempercepat query pencarian. Field CreatedAt menggunakan autoCreateTime yang akan otomatis diisi dengan timestamp saat record dibuat.
+
+Pemisahan model dari entity memungkinkan evolusi skema database tanpa mempengaruhi logika bisnis. Migration dapat menambah kolom baru di model tanpa mengubah entity jika kolom tersebut tidak relevan dengan domain logic.
+
+### C.16 Data Mapper
+
+Mapper menyediakan fungsi konversi bidirectional antara entity domain dan model database. Mapper mengabstraksi detail transformasi dari repository.
+
+Lokasi file adalah internal/mapper/user_mapper.go yang berisi struct UserMapper dengan method untuk konversi entity dan model.
+
+Method ToEntity mentransformasi model User menjadi entity User. Method ini mengkonversi field-field yang berbeda format seperti enum Role dan Status dari string menjadi custom type.
+
+```go
+func (m *UserMapper) ToEntity(u *model.User) *entity.User {
+	if u == nil { return nil }
+	return &entity.User{
+		Id:            u.Id,
+		Email:         u.Email,
+		PasswordHash:  u.PasswordHash,
+		FullName:      u.FullName,
+		Role:          entity.UserRole(u.Role),
+		Status:        entity.UserStatus(u.Status),
+		EmailVerified: u.EmailVerified,
+		// ...
+	}
+}
+```
+
+*Snippet 35: Transformasi model ke entity dengan konversi tipe.*
+
+Method ToModel melakukan transformasi sebaliknya dari entity User menjadi model User. Enum Role dan Status dikonversi dari custom type menjadi string.
+
+```go
+func (m *UserMapper) ToModel(u *entity.User) *model.User {
+	if u == nil { return nil }
+	return &model.User{
+		Id:            u.Id,
+		Email:         u.Email,
+		PasswordHash:  u.PasswordHash,
+		Role:          string(u.Role),
+		Status:        string(u.Status),
+		// ...
+	}
+}
+```
+
+*Snippet 36: Transformasi entity ke model dengan konversi tipe.*
+
+Mapper juga menyediakan method untuk konversi token. Method EmailVerificationTokenToModel mengkonversi entity token menjadi model token.
+
+```go
+func (m *UserMapper) EmailVerificationTokenToModel(t *entity.EmailVerificationToken) *model.EmailVerificationToken {
+	if t == nil { return nil }
+	return &model.EmailVerificationToken{
+		Id:        t.Id,
+		UserId:    t.UserId,
+		Token:     t.Token,
+		ExpiresAt: t.ExpiresAt,
+		CreatedAt: t.CreatedAt,
+	}
+}
+```
+
+*Snippet 37: Transformasi token entity ke model.*
+
+Pemisahan transformasi dalam mapper terpisah membuat repository lebih clean dan focused. Repository hanya perlu memanggil mapper.ToModel atau mapper.ToEntity tanpa perlu tahu detail konversi.
+
+### C.17 Email Service
+
+Komponen ini mengorkestrasi pengiriman email transaksional menggunakan protokol SMTP. Email service adalah infrastructure concern yang diabstraksi melalui interface.
+
+Lokasi file adalah internal/pkg/mailer/email_service.go yang berisi interface dan implementation untuk pengiriman email.
+
+Interface IEmailService mendefinisikan kontrak untuk pengiriman berbagai jenis email. Method SendOTP digunakan untuk mengirim kode verifikasi, dan SendResetToken untuk mengirim token reset password.
+
+```go
+type IEmailService interface {
+	SendOTP(toEmail, otp string) error
+	SendResetToken(toEmail, token string) error
+}
+```
+
+*Snippet 38: Interface email service untuk abstraksi pengiriman email.*
+
+Implementation emailService mengenkapsulasi konfigurasi SMTP dialer dan template HTML untuk setiap jenis email. Struct menyimpan dialer yang sudah dikonfigurasi dengan host, port, dan credentials.
+
+Method SendOTP membuat message email dengan template HTML yang berisi kode OTP. Template menggunakan styling inline untuk memastikan tampilan yang konsisten di berbagai email client.
+
+```go
+func (s *emailService) SendOTP(toEmail, otp string) error {
+	m := gomail.NewMessage()
+	m.SetHeader("From", s.senderEmail)
+	m.SetHeader("To", toEmail)
+	m.SetHeader("Subject", "Your Verification Code")
+	
+	body := fmt.Sprintf(`
+		<div style="font-family: Arial, sans-serif; padding: 20px;">
+			<h2>Welcome to NoteFiber!</h2>
+			<p>Your verification code is:</p>
+			<h1 style="color: #4CAF50; letter-spacing: 5px;">%s</h1>
+			<p>This code will expire in 15 minutes.</p>
+		</div>
+	`, otp)
+	
+	m.SetBody("text/html", body)
+	return s.dialer.DialAndSend(m)
+}
+```
+
+*Snippet 39: Implementasi SendOTP dengan template HTML.*
+
+Message dibuat menggunakan gomail library dengan header From, To, dan Subject. Body email diset sebagai HTML untuk tampilan yang lebih menarik dengan styling dan formatting.
+
+Method ini dipanggil secara asynchronous dari service layer setelah transaksi database berhasil. Kegagalan pengiriman email tidak mempengaruhi keberhasilan registrasi karena dijalankan di goroutine terpisah.
+
+---
+
+## D. Ringkasan Arsitektur
+
+### D.1 Tabel Komponen
+
+Berikut adalah ringkasan lengkap dari 17 komponen yang menyusun fitur sign up backend beserta lokasi file dan tanggung jawab masing-masing.
+
+| No | Layer | File | Tanggung Jawab |
+|---|---|---|---|
+| 1 | HTTP Server | server/server.go | Inisialisasi Fiber, middleware, route registration |
+| 2 | DI Container | bootstrap/container.go | Dependency wiring & injection |
+| 3 | DTO | dto/auth_payment_dto.go | Kontrak data request/response |
+| 4 | Controller | controller/auth_controller.go | HTTP handler, parsing, response formatting |
+| 5 | Service | service/auth_service.go | Orkestrasi logika bisnis |
+| 6 | Factory Interface | unitofwork/repository_factory.go | Kontrak pembuatan Unit of Work |
+| 7 | Factory Impl | unitofwork/repository_factory_impl.go | Implementasi factory |
+| 8 | UoW Interface | unitofwork/unit_of_work.go | Kontrak transaksi & akses repository |
+| 9 | UoW Impl | unitofwork/unit_of_work_impl.go | Manajemen transaksi GORM |
+| 10 | Repository Contract | contract/user_repository.go | Interface akses data User |
+| 11 | Specification Base | specification/specification.go | Interface pola specification |
+| 12 | User Specifications | specification/user_specifications.go | Query predicates untuk User |
+| 13 | Repository Impl | implementation/user_repository_impl.go | Persistensi data dengan GORM |
+| 14 | Entity | entity/user_entity.go | Objek domain |
+| 15 | Model | model/user_model.go | Representasi tabel database |
+| 16 | Mapper | mapper/user_mapper.go | Transformasi Entity-Model |
+| 17 | Mailer | pkg/mailer/email_service.go | Pengiriman email SMTP |
+
+*Tabel 1: Ringkasan 17 komponen fitur sign up backend.*
+
+### D.2 Layered Architecture
+
+Arsitektur backend mengikuti prinsip layered architecture dengan pemisahan yang jelas antara presentation, business logic, data access, dan infrastructure.
+
+Layer presentation terdiri dari HTTP server dan controller yang menangani HTTP request-response cycle. Layer ini tidak mengandung business logic dan hanya bertanggung jawab untuk parsing input dan formatting output.
+
+Layer business logic terdiri dari service yang mengimplementasikan use cases aplikasi. Service mengoordinasikan operasi dari berbagai repository dan infrastructure services untuk menyelesaikan business transaction.
+
+Layer data access terdiri dari repository dan unit of work yang mengabstraksi akses ke database. Repository menyediakan interface CRUD untuk entity domain tanpa mengekspos detail SQL atau ORM.
+
+Layer infrastructure terdiri dari email service, database connection, dan external dependencies lainnya. Layer ini diinjeksikan ke service melalui interface untuk memudahkan testing dan deployment.
+
+```
+[HTTP Server & Controller]
+         |
+         v
+    [Service]
+         |
+    +----+----+
+    |         |
+    v         v
+[Repository] [Email Service]
+    |
+    v
+[Database]
+```
+
+*Snippet 40: Diagram layer arsitektur backend.*
+
+### D.3 Dependency Flow
+
+Dependency selalu mengalir dari layer luar ke layer dalam menuju domain core. Layer luar bergantung pada layer dalam melalui interface yang didefinisikan di layer dalam.
+
+Controller bergantung pada service melalui interface. Controller tidak tahu implementasi konkret dari service dan hanya tahu kontrak yang didefinisikan interface.
+
+Service bergantung pada repository dan email service melalui interface. Service tidak tahu apakah repository menggunakan GORM, raw SQL, atau NoSQL database.
+
+Repository bergantung pada mapper dan model untuk transformasi data. Repository tidak tahu bagaimana entity digunakan di layer service.
+
+Dependency injection container mengwiring semua komponen dengan membuat instance konkret dan menyuntikkannya ke komponen yang membutuhkan.
+
+---
+
+## E. Transaction Management
+
+### E.1 ACID Properties
+
+Sistem menggunakan transaksi database untuk memastikan ACID properties terpenuhi dalam operasi registrasi.
+
+Atomicity dijamin dengan unit of work pattern dimana semua operasi dalam satu transaction berhasil atau semua gagal. Jika insert user berhasil tetapi insert token gagal, transaksi di-rollback dan kedua operasi dibatalkan.
+
+Consistency dijamin dengan constraints database seperti unique index pada email dan foreign key antara token dan user. Database tidak akan mengizinkan data yang melanggar constraints.
+
+Isolation dijamin dengan isolation level default PostgreSQL yang memastikan transaksi tidak melihat perubahan dari transaksi lain yang belum di-commit.
+
+Durability dijamin dengan commit operation yang memastikan perubahan tersimpan permanen di disk sebelum response dikembalikan ke client.
+
+### E.2 Rollback Strategy
+
+Service menggunakan defer statement untuk memastikan transaksi di-rollback jika terjadi error di tahap manapun.
+
+```go
+if err := uow.Begin(ctx); err != nil { return nil, err }
+defer uow.Rollback()
+```
+
+*Snippet 41: Defer rollback untuk automatic cleanup.*
+
+Defer rollback dipanggil sebelum method return, baik karena error maupun karena success. Jika transaksi sudah di-commit, rollback tidak melakukan apa-apa. Jika transaksi belum di-commit karena error, rollback membatalkan semua perubahan.
+
+Pendekatan ini memastikan bahwa tidak ada partial state di database. User tidak akan tersimpan tanpa token, atau token tidak akan tersimpan tanpa user.
+
+---
+
+## F. Asynchronous Email Delivery
+
+### F.1 Goroutine Pattern
+
+Email dikirim secara asynchronous menggunakan goroutine untuk menghindari blocking response ke client. Goroutine adalah lightweight thread di Go yang memungkinkan concurrent execution.
+
+```go
+go func() { 
+	if err := s.emailService.SendOTP(user.Email, otpCode); err != nil {
+		log.Printf("Failed to send OTP email: %v", err)
+	}
+}()
+```
+
+*Snippet 42: Async email delivery dengan goroutine.*
+
+Goroutine dijalankan setelah transaksi di-commit untuk memastikan data sudah tersimpan sebelum email dikirim. Jika email dikirim sebelum commit dan transaksi gagal, user akan menerima OTP tetapi akun tidak dibuat.
+
+### F.2 Error Handling
+
+Error pengiriman email tidak mempengaruhi keberhasilan registrasi. Jika SMTP server

@@ -1,0 +1,2628 @@
+Arsitektur Notification Management Real-Time di Industri Besar
+Saya akan jelaskan bagaimana industri menangani sistem notifikasi real-time dengan fokus pada paradigma, strategi arsitektur, dan skalabilitas — bukan implementasi kode.
+
+1. Paradigma Fundamental: Event-Driven Architecture
+Industri besar tidak pernah menangani notifikasi sebagai "fitur tambahan". Mereka memperlakukannya sebagai sistem event yang berdiri sendiri dengan prinsip:
+Core Principle: Everything is an Event
+
+Setiap aksi di aplikasi Anda (login, create note, refund request, admin approval) adalah event yang dipublikasikan
+Notification system adalah subscriber yang mendengarkan event-event ini
+Ini memisahkan business logic dari notification concern
+
+Keuntungan paradigma ini:
+
+Anda tidak perlu mengubah kode bisnis saat menambah notifikasi baru
+Sistem notifikasi bisa mati/restart tanpa mengganggu aplikasi utama
+Scalable: bisa handle jutaan event tanpa bottleneck
+
+
+2. Arsitektur Layer: Separation of Concerns
+Industri menggunakan 3-4 layer terpisah untuk notification system:
+Layer 1: Event Producer (Application Layer)
+
+Setiap service bisnis Anda (AuthService, NoteService, RefundService) cukup emit event
+Tidak peduli siapa yang consume
+Contoh: UserLoggedIn, NoteCreated, RefundRequested
+
+Layer 2: Message Broker (Middleware)
+
+Ini yang Anda sebut "layer tengah" — SANGAT PENTING
+Tech stack: RabbitMQ, Kafka, atau NATS (untuk Golang sangat cocok NATS)
+Fungsi: menerima event, routing ke subscriber yang tepat, guarantee delivery
+
+Kenapa perlu Message Broker?
+
+Decoupling: Producer tidak perlu tahu siapa consumer-nya
+Reliability: Event tidak hilang meski notification service down
+Scalability: Bisa spawn multiple notification workers untuk handle load tinggi
+
+Layer 3: Notification Service (Dedicated Microservice)
+
+Service khusus yang hanya handle notifikasi
+Subscribe ke message broker
+Tanggung jawab:
+
+Transform event jadi notifikasi yang human-readable
+Persist ke database notification
+Push ke client via WebSocket/SSE
+
+
+
+Layer 4: Real-Time Transport
+
+WebSocket atau Server-Sent Events (SSE) untuk push ke browser
+Maintain connection pool antara server dan setiap client yang online
+
+
+3. Database Strategy: Notification Schema
+Industri umumnya membuat dedicated database untuk notifikasi dengan struktur:
+Tabel Utama:
+notifications table:
+- id
+- user_id (siapa yang terima)
+- actor_id (siapa yang trigger, bisa null)
+- type (enum: LOGIN, NOTE_CREATED, REFUND_REQUESTED, dll)
+- entity_type (NOTE, REFUND, USER)
+- entity_id (ID dari entity terkait)
+- message (text template)
+- metadata (JSON: flexible data untuk setiap type)
+- is_read (boolean)
+- created_at
+- read_at
+notification_types table (untuk skalabilitas):
+- id
+- type_code (LOGIN_ALERT)
+- display_name ("New Login Activity")
+- template ("You logged in from {device} at {time}")
+- is_active (toggle on/off tanpa deploy)
+- priority (HIGH, MEDIUM, LOW)
+- channels (array: WEB, EMAIL, PUSH)
+Kenapa Ini Scalable?
+
+Anda bisa register notifikasi baru cukup dengan insert row di notification_types
+Metadata JSON membuat schema flexible
+Tidak perlu alter table atau deploy ulang
+
+
+4. Registration Pattern: Dynamic Notification Registry
+Ini jawaban untuk "bagaimana register item baru yang mau di-track secara simple":
+Event Registry Service
+Buat sebuah configuration layer di aplikasi yang map event ke notification:
+Conceptual Registry:
+EventType: USER_LOGIN
+  → NotificationType: LOGIN_ALERT
+  → Target: SELF (user yang login)
+  → Template: "You logged in from {device}"
+  
+EventType: NOTE_CREATED
+  → NotificationType: NOTE_ACTIVITY
+  → Target: SELF
+  → Template: "Today you created note: {title}"
+  
+EventType: REFUND_REQUESTED
+  → NotificationType: REFUND_REQUEST_ADMIN
+  → Target: ADMIN_ROLE
+  → Template: "User {username} requested refund"
+  
+EventType: REFUND_APPROVED
+  → NotificationType: REFUND_STATUS_UPDATE
+  → Target: REQUESTER
+  → Template: "Your refund has been approved"
+Ini bisa disimpan di:
+
+Database (paling flexible, bisa CRUD via admin panel)
+Config file (YAML/JSON, perlu restart service)
+Code-based registry dengan builder pattern (type-safe, perlu deploy)
+
+
+5. Real-Time Delivery: Push Mechanism
+WebSocket Pattern (Recommended)
+
+Setiap user connect ke WebSocket server saat login
+Server maintain connection pool: map[userID][]WebSocketConnection
+Saat ada notifikasi baru untuk user X:
+
+Query connection dari pool
+Push JSON message via WebSocket
+Client React terima dan update UI
+
+
+
+Fallback: Server-Sent Events (SSE)
+
+Alternatif jika WebSocket terlalu kompleks
+One-way streaming dari server ke client
+Lebih simple tapi kurang interactive
+
+Hybrid: Polling + WebSocket
+
+WebSocket untuk real-time
+Periodic polling (setiap 30 detik) sebagai fallback jika WebSocket disconnect
+Polling hit endpoint: GET /notifications?since=lastTimestamp
+
+
+6. Stack Teknologi: Rekomendasi untuk Golang + React
+Backend (Golang):
+Message Broker:
+
+NATS (paling ringan, native Golang support, cocok untuk startup/medium scale)
+RabbitMQ (mature, reliable, banyak pattern)
+Kafka (overkill kecuali Anda handle millions events/second)
+
+WebSocket Library:
+
+Gorilla WebSocket (standard, production-ready)
+Melody (high-level wrapper, easier)
+
+Database:
+
+PostgreSQL untuk notification storage (JSONB column untuk metadata)
+Redis untuk caching connection pool dan unread count
+
+Frontend (React + TypeScript):
+
+Socket.io-client (jika pakai Socket.io di backend)
+Native WebSocket API (jika pakai Gorilla)
+React Query untuk state management notification list
+Zustand/Jotai untuk global notification state
+
+
+7. Scalability Strategy
+Horizontal Scaling:
+
+Notification Service bisa di-scale dengan multiple workers
+Message broker handle load balancing antar workers
+WebSocket connection di-distribute via sticky session atau Redis Pub/Sub
+
+Read Replica:
+
+Database read untuk notification list via replica
+Write (create notification) ke master
+
+Caching Layer:
+
+Unread count di Redis dengan TTL
+Recent notifications (last 50) di cache
+Invalidate cache saat ada notifikasi baru
+
+Archive Strategy:
+
+Soft delete notification after 90 days
+Move ke cold storage (S3/archive table)
+Keep unread notifications indefinitely
+
+
+8. Flow Example: Refund Case End-to-End
+Mari trace bagaimana refund request menjadi notifikasi real-time:
+Step 1: User Request Refund
+User klik "Request Refund"
+  ↓
+RefundService.CreateRefund()
+  ↓
+Save ke database: refunds table
+  ↓
+Emit event: {
+  type: REFUND_REQUESTED,
+  userId: "user123",
+  refundId: "ref456",
+  amount: 100000
+}
+  ↓
+Publish ke RabbitMQ/NATS
+Step 2: Notification Service Process
+Notification Worker subscribe event
+  ↓
+Transform event → notification:
+  - Type: REFUND_REQUEST_ADMIN
+  - Target: all users with ADMIN role
+  - Message: "User Budi request refund Rp100.000"
+  ↓
+Insert ke notifications table
+  ↓
+Push via WebSocket ke semua admin yang online
+Step 3: Admin See Real-Time
+Admin dashboard:
+  WebSocket receive message
+  ↓
+  React state update (notification bell badge +1)
+  ↓
+  Toast notification muncul
+  ↓
+  List notification di dropdown updated
+Step 4: Admin Approve
+Admin klik "Approve"
+  ↓
+RefundService.ApproveRefund()
+  ↓
+Update database: refunds.status = APPROVED
+  ↓
+Emit event: {
+  type: REFUND_APPROVED,
+  userId: "user123",
+  refundId: "ref456"
+}
+  ↓
+Notification Service process
+  ↓
+Create notification for USER (bukan admin)
+  ↓
+Push ke user via WebSocket
+Step 5: User See Real-Time
+User app (jika online):
+  Terima notifikasi via WebSocket
+  ↓
+  Update UI: "Your refund has been approved!"
+
+9. Modernitas: Best Practice Industry
+Configuration-Driven:
+
+Notification types stored di database/config
+Bisa enable/disable via admin panel tanpa deploy
+A/B testing notification template
+
+Multi-Channel Support:
+
+Satu event bisa trigger multiple channel (Web + Email + Push)
+Channel priority: real-time WebSocket → fallback Email
+
+Rate Limiting:
+
+Prevent notification spam (max 10 notification/minute per user)
+Aggregate similar events (5 likes → "You got 5 likes")
+
+Personalization:
+
+User preference: mute certain notification types
+Digest mode: batch notification jadi 1 email summary
+
+
+10. Trade-off: Kompleksitas vs Kebutuhan
+Simple Approach (MVP):
+
+Skip message broker, langsung insert ke DB + push via WebSocket
+Single notification service
+Polling fallback
+Good for: <10k users, low traffic
+
+Production Approach (Recommended):
+
+Message broker (NATS/RabbitMQ)
+Dedicated notification microservice
+WebSocket dengan Redis Pub/Sub untuk multi-instance
+Good for: >10k users, growth trajectory
+
+Enterprise Approach:
+
+Kafka untuk event streaming
+Separate services: NotificationRouter, NotificationDispatcher, NotificationDelivery
+Multiple databases (write to time-series DB)
+Good for: Millions of users, fintech/e-commerce scale
+
+
+Kesimpulan: Mental Model yang Benar
+
+Notification adalah sistem tersendiri, bukan feature tambahan
+Event-driven architecture adalah kunci skalabilitas
+Message broker adalah jantung yang decoupling sistem
+Database schema yang flexible (notification_types + metadata JSON)
+Real-time bukan magic, butuh persistent connection (WebSocket)
+Registry pattern untuk manage item yang di-track
+
+Prinsip Anda "susah di awal, mudah besok" adalah 100% benar. Setup message broker + event system memang investment, tapi setelah itu menambah notifikasi baru cuma tambah row di database dan emit event baru.
+Apakah penjelasan paradigma dan arsitektur ini cukup clear? Atau ada specific part yang mau di-drill down lebih dalam?Oke sepertinya saya udah membaca apa yang ada dan Anda masih bingung dan masih menebak-nebak gitu ya mungkin tujuan anda bagus untuk bisa memberikan rekomendasi gitu nah kita nggak boleh ini ya sekarang itu nggak boleh lebih milih yang tidak modern saya tuh ingin belajar lebih modern apakah saya nembak langsung ke database apakah saya utilize lagi message broker itu masa bodoh yang penting saya paradigmanya modern Saya mau belajar bagaimana industri besar memang sih kasus saya itu kecil tapi saya tuh mau praktek mereka tuh bagaimana nah jadi coba deh kasih satu final arsitektur dijabarkan stack teknologinya apa sekarang itu front and saya pakai react type script back end saya pakai golang nah saat ini saya belum ada redis atau kafka atau rabbit mq atau message broker
+Nah jadi nggak usah bingung lagi udah jelasin dulu di awal pilih satu aja yang paling mantap dan SCALABILITAS bagus
+Nanti harapannya di akhir itu ada seperti Dummy flow full ambil satu kasus supaya saya bisa tergambar kalau apa yang anda buat itu dia realisasikan kan maka akan seperti apa gituShow more06.03Final Architecture: Modern Notification System (Production-Grade)
+Oke, saya kasih SATU arsitektur final yang modern, scalable, dan production-ready. No more options, ini yang dipakai industri besar dan yang harus Anda implement.
+
+STACK TEKNOLOGI (Final Decision)
+Backend:
+
+Golang (sudah ada)
+PostgreSQL (main database)
+Redis (caching + pub/sub untuk WebSocket)
+NATS (message broker - pilihan terbaik untuk Golang)
+Gorilla WebSocket (real-time connection)
+
+Frontend:
+
+React + TypeScript (sudah ada)
+WebSocket API (native)
+React Query (state management untuk notification list)
+Zustand (global state untuk real-time notification)
+
+Infrastructure:
+
+Docker Compose (local dev)
+Kubernetes (production, optional untuk awal)
+
+
+ARSITEKTUR LAYER (4-Tier System)
+┌─────────────────────────────────────────────────────────┐
+│                     FRONTEND LAYER                       │
+│   React + TypeScript + WebSocket Client                 │
+└────────────────┬────────────────────────────────────────┘
+                 │ WebSocket Connection
+                 │ REST API (HTTPS)
+┌────────────────▼────────────────────────────────────────┐
+│                  API GATEWAY LAYER                       │
+│  - REST Endpoints (CRUD, Auth)                          │
+│  - WebSocket Server (maintain connections)              │
+│  - Connection Pool Management (via Redis)               │
+└────┬────────────────────────────────┬───────────────────┘
+     │                                 │
+     │ Business Events                 │ Push Notifications
+     │                                 │
+┌────▼─────────────────┐      ┌───────▼──────────────────┐
+│  BUSINESS SERVICES   │      │  NOTIFICATION SERVICE    │
+│  - AuthService       │      │  (Dedicated Microservice)│
+│  - NoteService       │      │  - Event Subscriber      │
+│  - RefundService     │      │  - Notification Builder  │
+│  - etc.              │      │  - Delivery Manager      │
+└────┬─────────────────┘      └───────┬──────────────────┘
+     │                                 │
+     │ Publish Events                  │ Subscribe Events
+     │                                 │
+     └────────────┬────────────────────┘
+                  │
+        ┌─────────▼──────────┐
+        │   MESSAGE BROKER   │
+        │       NATS         │
+        │  (Event Bus)       │
+        └─────────┬──────────┘
+                  │
+     ┌────────────┴────────────┐
+     │                         │
+┌────▼─────────┐      ┌───────▼────────┐
+│  PostgreSQL  │      │     Redis      │
+│ (Persistent) │      │  (Cache + PS)  │
+└──────────────┘      └────────────────┘
+
+DATABASE SCHEMA (PostgreSQL)
+1. notification_types (Registry Table)
+sqlCREATE TABLE notification_types (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,  -- 'USER_LOGIN', 'NOTE_CREATED'
+    display_name VARCHAR(100) NOT NULL,
+    template TEXT NOT NULL,             -- 'You logged in from {device}'
+    target_type VARCHAR(20) NOT NULL,   -- 'SELF', 'ADMIN', 'ROLE'
+    target_role VARCHAR(50),            -- 'admin', 'moderator'
+    priority VARCHAR(10) DEFAULT 'MEDIUM', -- 'HIGH', 'MEDIUM', 'LOW'
+    channels JSONB DEFAULT '["web"]',   -- ['web', 'email', 'push']
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Seed data
+INSERT INTO notification_types (code, display_name, template, target_type, priority) VALUES
+('USER_LOGIN', 'Login Activity', 'You logged in from {device} at {time}', 'SELF', 'LOW'),
+('NOTE_CREATED', 'Note Created', 'You created a note: "{title}"', 'SELF', 'LOW'),
+('REFUND_REQUESTED', 'Refund Request', 'User {username} requested refund for {amount}', 'ADMIN', 'HIGH'),
+('REFUND_APPROVED', 'Refund Approved', 'Your refund request has been approved', 'SELF', 'HIGH');
+2. notifications (Main Table)
+sqlCREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,              -- recipient
+    actor_id UUID,                      -- who triggered (nullable)
+    type_code VARCHAR(50) NOT NULL,     -- FK to notification_types
+    entity_type VARCHAR(50),            -- 'note', 'refund', 'user'
+    entity_id UUID,                     -- ID of related entity
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,              -- rendered from template
+    metadata JSONB,                     -- flexible data
+    is_read BOOLEAN DEFAULT false,
+    read_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    
+    FOREIGN KEY (type_code) REFERENCES notification_types(code),
+    INDEX idx_user_created (user_id, created_at DESC),
+    INDEX idx_user_unread (user_id, is_read) WHERE is_read = false
+);
+3. user_notification_preferences (Optional)
+sqlCREATE TABLE user_notification_preferences (
+    user_id UUID PRIMARY KEY,
+    muted_types TEXT[],                 -- ['USER_LOGIN', 'NOTE_CREATED']
+    email_enabled BOOLEAN DEFAULT true,
+    push_enabled BOOLEAN DEFAULT true,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+---
+
+## **GOLANG SERVICE ARCHITECTURE**
+
+### **Project Structure:**
+```
+/notification-system
+├── /cmd
+│   ├── /api          # Main API server + WebSocket
+│   └── /notifier     # Notification service (worker)
+├── /internal
+│   ├── /domain       # Entities, interfaces (DDD)
+│   ├── /services     # Business logic
+│   │   ├── auth_service.go
+│   │   ├── note_service.go
+│   │   └── refund_service.go
+│   ├── /notification # Notification domain
+│   │   ├── repository.go
+│   │   ├── service.go
+│   │   └── delivery.go
+│   ├── /events       # Event definitions + publisher
+│   │   ├── event.go
+│   │   ├── publisher.go
+│   │   └── subscriber.go
+│   ├── /websocket    # WebSocket manager
+│   │   └── hub.go
+│   └── /repository   # Data access
+└── /pkg              # Shared utilities
+    ├── /nats
+    └── /redis
+
+CORE COMPONENTS (Conceptual)
+1. Event Definition (Domain Layer)
+Setiap event adalah strongly-typed struct:
+go// Base event interface
+type Event interface {
+    EventType() string
+    Timestamp() time.Time
+    Payload() map[string]interface{}
+}
+
+// Concrete events
+type UserLoginEvent struct {
+    UserID    uuid.UUID
+    Device    string
+    IPAddress string
+    LoginTime time.Time
+}
+
+type NoteCreatedEvent struct {
+    UserID  uuid.UUID
+    NoteID  uuid.UUID
+    Title   string
+}
+
+type RefundRequestedEvent struct {
+    UserID   uuid.UUID
+    RefundID uuid.UUID
+    Amount   float64
+    Reason   string
+}
+
+type RefundApprovedEvent struct {
+    UserID   uuid.UUID
+    RefundID uuid.UUID
+    AdminID  uuid.UUID
+}
+2. Event Publisher (Infrastructure Layer)
+Setiap business service memiliki akses ke EventPublisher:
+gotype EventPublisher interface {
+    Publish(ctx context.Context, event Event) error
+}
+
+type NATSEventPublisher struct {
+    conn *nats.Conn
+}
+
+// Business service menggunakan publisher
+type NoteService struct {
+    repo      NoteRepository
+    publisher EventPublisher
+}
+
+func (s *NoteService) CreateNote(ctx context.Context, userID uuid.UUID, title string) error {
+    // 1. Business logic
+    note := &Note{ID: uuid.New(), UserID: userID, Title: title}
+    if err := s.repo.Save(ctx, note); err != nil {
+        return err
+    }
+    
+    // 2. Publish event (fire-and-forget)
+    event := NoteCreatedEvent{
+        UserID: userID,
+        NoteID: note.ID,
+        Title:  title,
+    }
+    s.publisher.Publish(ctx, event) // async, non-blocking
+    
+    return nil
+}
+Key Point: Business service tidak tahu ada notification system. Dia hanya publish event.
+
+3. Notification Service (Separate Process)
+Ini adalah dedicated microservice yang berjalan terpisah:
+go// Main responsibility: Convert events → notifications
+type NotificationService struct {
+    subscriber EventSubscriber
+    repo       NotificationRepository
+    typeRepo   NotificationTypeRepository
+    delivery   NotificationDelivery
+}
+
+func (s *NotificationService) Start() {
+    // Subscribe to all events
+    s.subscriber.Subscribe("events.*", func(event Event) {
+        s.handleEvent(event)
+    })
+}
+
+func (s *NotificationService) handleEvent(event Event) {
+    // 1. Get notification type config from DB
+    notifType, err := s.typeRepo.FindByCode(event.EventType())
+    if err != nil || !notifType.IsActive {
+        return // skip if not registered or disabled
+    }
+    
+    // 2. Determine recipients
+    recipients := s.resolveRecipients(notifType, event)
+    
+    // 3. Build notification for each recipient
+    for _, recipientID := range recipients {
+        notification := s.buildNotification(recipientID, notifType, event)
+        
+        // 4. Persist to database
+        s.repo.Create(notification)
+        
+        // 5. Deliver real-time (if user online)
+        s.delivery.Send(recipientID, notification)
+    }
+}
+
+func (s *NotificationService) resolveRecipients(notifType NotificationType, event Event) []uuid.UUID {
+    switch notifType.TargetType {
+    case "SELF":
+        return []uuid.UUID{event.UserID} // who triggered the event
+    case "ADMIN":
+        return s.repo.FindUsersByRole("admin")
+    case "ROLE":
+        return s.repo.FindUsersByRole(notifType.TargetRole)
+    }
+    return nil
+}
+
+func (s *NotificationService) buildNotification(userID uuid.UUID, notifType NotificationType, event Event) Notification {
+    // Render template with event data
+    message := renderTemplate(notifType.Template, event.Payload())
+    
+    return Notification{
+        UserID:     userID,
+        TypeCode:   notifType.Code,
+        Title:      notifType.DisplayName,
+        Message:    message,
+        Metadata:   event.Payload(),
+        EntityType: event.EntityType(),
+        EntityID:   event.EntityID(),
+    }
+}
+
+4. WebSocket Hub (Real-Time Delivery)
+WebSocket server maintain connection pool:
+gotype Hub struct {
+    clients    map[uuid.UUID][]*Client // userID -> connections
+    register   chan *Client
+    unregister chan *Client
+    broadcast  chan *Message
+    redis      *redis.Client // for multi-instance coordination
+}
+
+type Client struct {
+    hub    *Hub
+    conn   *websocket.Conn
+    userID uuid.UUID
+    send   chan []byte
+}
+
+func (h *Hub) Run() {
+    for {
+        select {
+        case client := <-h.register:
+            h.clients[client.userID] = append(h.clients[client.userID], client)
+            
+        case client := <-h.unregister:
+            h.removeClient(client)
+            
+        case message := <-h.broadcast:
+            h.sendToUser(message.UserID, message.Data)
+        }
+    }
+}
+
+func (h *Hub) sendToUser(userID uuid.UUID, data []byte) {
+    // Send to all connections of this user (multi-device)
+    for _, client := range h.clients[userID] {
+        select {
+        case client.send <- data:
+        default:
+            h.removeClient(client) // dead connection
+        }
+    }
+}
+5. Notification Delivery
+Menghubungkan notification service dengan WebSocket:
+gotype NotificationDelivery struct {
+    hub   *Hub
+    redis *redis.Client
+}
+
+func (d *NotificationDelivery) Send(userID uuid.UUID, notification Notification) {
+    payload := map[string]interface{}{
+        "type": "notification",
+        "data": notification,
+    }
+    
+    data, _ := json.Marshal(payload)
+    
+    // If user connected to this instance
+    d.hub.SendToUser(userID, data)
+    
+    // Also publish to Redis (for other instances)
+    d.redis.Publish(ctx, fmt.Sprintf("notif:%s", userID), data)
+}
+
+REACT FRONTEND ARCHITECTURE
+1. WebSocket Client
+typescript// /src/services/websocket.ts
+class NotificationWebSocket {
+  private ws: WebSocket | null = null;
+  private reconnectInterval = 5000;
+  
+  connect(token: string) {
+    this.ws = new WebSocket(`ws://localhost:8080/ws?token=${token}`);
+    
+    this.ws.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      if (message.type === 'notification') {
+        this.handleNotification(message.data);
+      }
+    };
+    
+    this.ws.onclose = () => {
+      setTimeout(() => this.connect(token), this.reconnectInterval);
+    };
+  }
+  
+  private handleNotification(notification: Notification) {
+    // Update global state
+    notificationStore.addNotification(notification);
+    
+    // Show toast
+    toast.info(notification.title);
+    
+    // Play sound
+    new Audio('/notification.mp3').play();
+  }
+}
+2. Global State (Zustand)
+typescript// /src/stores/notificationStore.ts
+interface NotificationState {
+  notifications: Notification[];
+  unreadCount: number;
+  addNotification: (notif: Notification) => void;
+  markAsRead: (id: string) => void;
+}
+
+export const useNotificationStore = create<NotificationState>((set) => ({
+  notifications: [],
+  unreadCount: 0,
+  
+  addNotification: (notif) => set((state) => ({
+    notifications: [notif, ...state.notifications],
+    unreadCount: state.unreadCount + 1,
+  })),
+  
+  markAsRead: (id) => set((state) => ({
+    notifications: state.notifications.map(n => 
+      n.id === id ? { ...n, isRead: true } : n
+    ),
+    unreadCount: Math.max(0, state.unreadCount - 1),
+  })),
+}));
+3. Notification Component
+typescript// /src/components/NotificationBell.tsx
+export function NotificationBell() {
+  const { notifications, unreadCount, markAsRead } = useNotificationStore();
+  const [isOpen, setIsOpen] = useState(false);
+  
+  return (
+    <div className="relative">
+      <button onClick={() => setIsOpen(!isOpen)}>
+        <BellIcon />
+        {unreadCount > 0 && (
+          <span className="badge">{unreadCount}</span>
+        )}
+      </button>
+      
+      {isOpen && (
+        <NotificationDropdown
+          notifications={notifications}
+          onMarkAsRead={markAsRead}
+        />
+      )}
+    </div>
+  );
+}
+
+FULL FLOW EXAMPLE: REFUND REQUEST
+Mari trace dari user request refund sampai admin terima notifikasi real-time:
+Step 1: User Request Refund (Frontend)
+typescript// User klik tombol "Request Refund"
+async function handleRefundRequest() {
+  await fetch('/api/refunds', {
+    method: 'POST',
+    body: JSON.stringify({
+      orderId: 'order123',
+      amount: 100000,
+      reason: 'Product defective'
+    })
+  });
+  
+  // UI shows "Request submitted"
+}
+
+Step 2: Backend Process Request (API Server)
+go// POST /api/refunds
+func (h *RefundHandler) CreateRefund(w http.ResponseWriter, r *http.Request) {
+    var req RefundRequest
+    json.NewDecoder(r.Body).Decode(&req)
+    
+    userID := getUserIDFromContext(r.Context())
+    
+    // Call business service
+    refund, err := h.refundService.CreateRefund(r.Context(), CreateRefundParams{
+        UserID:  userID,
+        OrderID: req.OrderID,
+        Amount:  req.Amount,
+        Reason:  req.Reason,
+    })
+    
+    w.WriteHeader(http.StatusCreated)
+    json.NewEncoder(w).Encode(refund)
+}
+
+Step 3: Business Logic + Publish Event (RefundService)
+gofunc (s *RefundService) CreateRefund(ctx context.Context, params CreateRefundParams) (*Refund, error) {
+    // 1. Validate business rules
+    order, err := s.orderRepo.FindByID(ctx, params.OrderID)
+    if err != nil {
+        return nil, ErrOrderNotFound
+    }
+    
+    if order.UserID != params.UserID {
+        return nil, ErrUnauthorized
+    }
+    
+    // 2. Create refund entity
+    refund := &Refund{
+        ID:      uuid.New(),
+        UserID:  params.UserID,
+        OrderID: params.OrderID,
+        Amount:  params.Amount,
+        Status:  RefundStatusPending,
+        Reason:  params.Reason,
+    }
+    
+    // 3. Persist to database
+    if err := s.refundRepo.Create(ctx, refund); err != nil {
+        return nil, err
+    }
+    
+    // 4. Publish event (CRITICAL: ini trigger notification)
+    event := RefundRequestedEvent{
+        UserID:   params.UserID,
+        RefundID: refund.ID,
+        Amount:   params.Amount,
+        Reason:   params.Reason,
+        OrderID:  params.OrderID,
+    }
+    
+    // Fire-and-forget, non-blocking
+    go s.eventPublisher.Publish(ctx, event)
+    
+    return refund, nil
+}
+```
+
+**Key Point:** `RefundService` tidak peduli apakah ada notification atau tidak. Dia hanya publish event.
+
+---
+
+### **Step 4: Event → NATS → Notification Service**
+```
+RefundService publishes event
+    ↓
+NATS receives: subject "events.refund.requested"
+    ↓
+NotificationService subscriber detects new message
+    ↓
+Triggers handleEvent()
+
+Step 5: Notification Service Processing
+gofunc (s *NotificationService) handleEvent(event Event) {
+    // Event: RefundRequestedEvent
+    
+    // 1. Query notification type from DB
+    notifType, _ := s.typeRepo.FindByCode("REFUND_REQUESTED")
+    // Result: {
+    //   code: "REFUND_REQUESTED",
+    //   display_name: "Refund Request",
+    //   template: "User {username} requested refund for {amount}",
+    //   target_type: "ADMIN",
+    //   priority: "HIGH"
+    // }
+    
+    // 2. Resolve recipients (all admins)
+    adminIDs := s.repo.FindUsersByRole("admin")
+    // Result: [admin1-uuid, admin2-uuid, admin3-uuid]
+    
+    // 3. Get user info for template
+    user, _ := s.userRepo.FindByID(event.UserID)
+    
+    // 4. Build notification for each admin
+    for _, adminID := range adminIDs {
+        // Render template
+        message := fmt.Sprintf(
+            "User %s requested refund for Rp%.0f",
+            user.Username,
+            event.Amount,
+        )
+        
+        notification := Notification{
+            ID:         uuid.New(),
+            UserID:     adminID,  // recipient
+            ActorID:    event.UserID,
+            TypeCode:   "REFUND_REQUESTED",
+            EntityType: "refund",
+            EntityID:   event.RefundID,
+            Title:      "Refund Request",
+            Message:    message,
+            Metadata: map[string]interface{}{
+                "refund_id": event.RefundID,
+                "amount":    event.Amount,
+                "order_id":  event.OrderID,
+            },
+            IsRead:    false,
+            CreatedAt: time.Now(),
+        }
+        
+        // 5. Save to database
+        s.repo.Create(notification)
+        
+        // 6. Deliver real-time (if admin online)
+        s.delivery.Send(adminID, notification)
+    }
+}
+
+Step 6: Real-Time Delivery to Admin
+gofunc (d *NotificationDelivery) Send(userID uuid.UUID, notification Notification) {
+    // Serialize notification
+    payload := map[string]interface{}{
+        "type": "notification",
+        "data": notification,
+    }
+    data, _ := json.Marshal(payload)
+    
+    // Check if admin connected to this WebSocket instance
+    if d.hub.HasUser(userID) {
+        d.hub.SendToUser(userID, data)
+    }
+    
+    // Also publish to Redis (for horizontal scaling)
+    // If admin connected to another instance, that instance will deliver
+    d.redis.Publish(ctx, fmt.Sprintf("notif:%s", userID), data)
+}
+
+Step 7: Admin Browser Receives (React)
+Admin sedang buka dashboard, WebSocket connection aktif:
+typescript// WebSocket onmessage handler
+ws.onmessage = (event) => {
+  const message = JSON.parse(event.data);
+  // message = {
+  //   type: "notification",
+  //   data: {
+  //     id: "notif-uuid",
+  //     title: "Refund Request",
+  //     message: "User budi requested refund for Rp100000",
+  //     metadata: { refund_id: "...", amount: 100000 }
+  //   }
+  // }
+  
+  if (message.type === 'notification') {
+    // 1. Update Zustand store
+    notificationStore.addNotification(message.data);
+    
+    // 2. Show toast notification
+    toast.info(message.data.title, {
+      description: message.data.message,
+      action: {
+        label: "View",
+        onClick: () => navigate(`/refunds/${message.data.metadata.refund_id}`)
+      }
+    });
+    
+    // 3. Play sound
+    notificationSound.play();
+    
+    // 4. Update badge count
+    // (handled automatically by Zustand store)
+  }
+};
+Admin UI automatically updates:
+
+Bell icon badge shows +1
+Toast muncul di pojok kanan atas
+Sound notification berbunyi
+Dropdown notification list ter-update
+
+
+Step 8: Admin Approves Refund
+Admin klik "Approve" di dashboard:
+typescriptasync function handleApproveRefund(refundId: string) {
+  await fetch(`/api/refunds/${refundId}/approve`, {
+    method: 'POST'
+  });
+}
+Backend flow:
+gofunc (s *RefundService) ApproveRefund(ctx context.Context, refundID uuid.UUID, adminID uuid.UUID) error {
+    // 1. Update status
+    refund, _ := s.refundRepo.FindByID(ctx, refundID)
+    refund.Status = RefundStatusApproved
+    refund.ApprovedBy = adminID
+    s.refundRepo.Update(ctx, refund)
+    
+    // 2. Publish event
+    event := RefundApprovedEvent{
+        UserID:   refund.UserID,  // PENTING: ini user yang request
+        RefundID: refund.ID,
+        AdminID:  adminID,
+    }
+    
+    go s.eventPublisher.Publish(ctx, event)
+    
+    return nil
+}
+
+Step 9: User Receives Approval Notification
+Notification Service process RefundApprovedEvent:
+go// Query notification type
+notifType, _ := s.typeRepo.FindByCode("REFUND_APPROVED")
+// Result: {
+//   target_type: "SELF",  // send to user who requested
+//   template: "Your refund request has been approved"
+// }
+
+// Build notification for USER (bukan admin)
+notification := Notification{
+    UserID:     event.UserID,  // user yang request refund
+    ActorID:    event.AdminID,
+    TypeCode:   "REFUND_APPROVED",
+    Title:      "Refund Approved",
+    Message:    "Your refund request has been approved",
+    Metadata: map[string]interface{}{
+        "refund_id": event.RefundID,
+        "admin_id":  event.AdminID,
+    },
+}
+
+// Save + Deliver
+s.repo.Create(notification)
+s.delivery.Send(event.UserID, notification)
+User browser (jika online) instantly receives:
+
+Bell badge +1
+Toast: "Your refund request has been approved"
+Sound notification
+
+
+SCALABILITY BENEFITS
+1. Add New Notification Type (Zero Code Change)
+Tinggal INSERT ke database:
+sqlINSERT INTO notification_types (code, display_name, template, target_type) VALUES
+('NOTE_DELETED', 'Note Deleted', 'You deleted note: "{title}"', 'SELF');
+Kemudian di business service, tinggal publish event:
+goevent := NoteDeletedEvent{UserID: userID, NoteID: noteID, Title: note.Title}
+s.eventPublisher.Publish(ctx, event)
+DONE. Notification akan otomatis ter-generate tanpa deploy ulang.
+
+2. Horizontal Scaling
+
+Deploy multiple instance API server + Notification service
+NATS handle load balancing otomatis
+Redis Pub/Sub coordinate WebSocket delivery antar instance
+PostgreSQL read replica untuk query notification list
+
+
+3. Toggle Feature On/Off
+Admin bisa disable notification type via admin panel:
+sqlUPDATE notification_types SET is_active = false WHERE code = 'USER_LOGIN';
+Langsung efektif tanpa restart service.
+
+DEPLOYMENT CHECKLIST
+Phase 1: Setup Infrastructure
+
+Install NATS server (Docker: nats:latest)
+Install Redis (Docker: redis:alpine)
+PostgreSQL sudah ada, migrate schema
+
+Phase 2: Backend Services
+
+Build API server with WebSocket endpoint
+Build Notification service (separate binary)
+Integrate NATS publisher di business services
+Seed notification_types table
+
+Phase 3: Frontend
+
+WebSocket client connection on app mount
+Zustand store for notification state
+Bell icon + dropdown component
+Toast notification library (react-hot-toast)
+
+Phase 4: Testing
+
+Test event flow end-to-end
+Test WebSocket reconnection
+Test multi-device (same user, multiple tabs)
+Load test with Apache Bench
+
+
+FINAL SUMMARY
+Paradigma: Event-Driven Architecture dengan NATS sebagai nervous system
+Skalabilitas:
+
+Add notification type = INSERT database row
+Horizontal scaling = deploy more instances
+Zero coupling antara business logic dan notification
+
+Modern Stack:
+
+NATS (event streaming, modern alternative Kafka untuk scale kecil-menengah)
+Redis (connection coordination + cache)
+WebSocket (real-time push)
+PostgreSQL JSONB (flexible metadata)
+
+Flow: Business Service → Publish Event → NATS → Notification Service → Database + WebSocket → User Browser
+Apakah ini sudah clear dan actionable untuk Anda implement?Oke saya lihat Anda masih memberikan saya kode ya padahal saya inginnya cuma strategi saja algoritma yang kita pakai alur deskriptif strategi konsep kayak gitu-gitu saya nggak butuh kodenya Saya cuman butuh apa sih yang dipakai paradigma gimana-gimana nah alurnya apa prinsipnya apa gitu nah sekarang berikan ulang full jangan berikan saya kode Saya ingin konsep06.06Modern Notification System: Pure Concept & Strategy
+Baik, saya jelaskan PURE KONSEP tanpa satu baris kode pun. Ini mental model yang harus Anda pahami.
+
+PARADIGMA UTAMA: EVENT-DRIVEN ARCHITECTURE
+Konsep Dasar:
+Sistem Anda bukan lagi monolitik yang langsung "action → notification". Tapi berubah jadi event-driven, artinya:
+
+Setiap aksi adalah Event - Login, create note, request refund, approve refund = semua adalah event
+Event adalah fakta yang terjadi - Bukan command/perintah, tapi statement: "User X telah login", "Refund Y telah dibuat"
+Publisher tidak peduli siapa listener - Service yang emit event tidak tahu siapa yang dengar, tidak tahu akan jadi notifikasi atau tidak
+Decoupling total - Business logic terpisah sepenuhnya dari notification logic
+
+Prinsip Fundamental:
+
+Single Responsibility Principle: Satu service hanya handle satu domain. RefundService cuma peduli refund, bukan notifikasi.
+Open/Closed Principle: Sistem terbuka untuk extension (tambah notifikasi baru) tapi tertutup untuk modification (tidak ubah business logic).
+Dependency Inversion: Business service depend on abstraction (EventPublisher interface), bukan implementasi konkret (NATS/RabbitMQ).
+
+
+ARSITEKTUR 4-LAYER
+Layer 1: Business Domain Layer
+Tanggung jawab: Eksekusi business logic murni
+Komponen:
+
+AuthService, NoteService, RefundService, OrderService
+Domain entities (User, Note, Refund)
+Business rules validation
+
+Prinsip:
+
+Service ini tidak tahu ada notification system
+Setelah menyelesaikan tugasnya (save to DB), dia emit event ke void
+Event publishing adalah side-effect, bukan main concern
+Jika event publisher fail, business operation tetap sukses
+
+Mental Model:
+Bayangkan business service sebagai speaker di konferensi. Dia bicara ke microphone (event publisher) tanpa tahu siapa yang dengar. Mungkin ada 1000 orang, mungkin kosong, dia tidak peduli.
+
+Layer 2: Event Bus (Message Broker)
+Tanggung jawab: Routing, queueing, dan delivery guarantee untuk event
+Tool: NATS / RabbitMQ / Kafka
+Prinsip:
+
+Pub/Sub pattern: Publisher publish, subscriber subscribe, broker jadi perantara
+Asynchronous: Publisher tidak tunggu subscriber selesai proses
+Durability: Event disimpan sementara di queue, jadi jika subscriber mati, event tidak hilang
+Load balancing: Jika ada 3 notification worker, broker distribute event secara merata
+
+Mental Model:
+Message broker adalah kantor pos. Business service kirim surat (event), kantor pos yang handle routing ke alamat yang tepat. Jika penerima sedang tidak di rumah (service down), surat disimpan dulu.
+Keuntungan:
+
+Fault tolerance: Notification service crash tidak ganggu business operation
+Scalability: Bisa spawn 10 notification worker, broker auto load-balance
+Flexibility: Besok mau tambah EmailService yang dengar event yang sama? Tinggal subscribe, zero code change di business layer
+
+
+Layer 3: Notification Domain Layer
+Tanggung jawab: Convert event menjadi notification
+Komponen:
+
+Notification Service (dedicated microservice)
+Notification Repository
+Notification Type Registry
+
+Prinsip:
+
+Event Subscriber: Listen ke message broker untuk event tertentu
+Transformation: Event (technical) → Notification (human-readable)
+Target Resolution: Tentukan siapa yang harus terima notifikasi
+Persistence: Save notification ke database
+Delivery Orchestration: Trigger real-time delivery
+
+Strategy: Configuration-Driven System
+Ini kunci scalability. Notification tidak hardcoded di logic, tapi driven by configuration table di database:
+Notification Type Registry:
+Setiap event type punya konfigurasi:
+
+Event code (USER_LOGIN, REFUND_REQUESTED)
+Display name untuk UI
+Message template dengan placeholder
+Target type (SELF = user yang trigger, ADMIN = all admin, ROLE = specific role)
+Priority (HIGH/MEDIUM/LOW)
+Channels (web, email, push notification)
+Active/inactive flag
+
+Alur Transformasi:
+
+Event masuk → Notification service detect
+Query registry → Cari konfigurasi untuk event type ini
+Check active flag → Jika inactive, skip (feature toggle)
+Resolve target →
+
+SELF: user_id dari event
+ADMIN: query semua user dengan role admin
+ROLE: query user dengan role tertentu
+
+
+Render template → Replace placeholder dengan data dari event
+Build notification object untuk setiap recipient
+Persist ke database
+Trigger delivery untuk user yang online
+
+Mental Model:
+Notification service adalah pabrik yang convert raw material (event) jadi produk jadi (notification) berdasarkan blueprint (registry configuration). Blueprint bisa diganti tanpa ubah mesin pabrik.
+
+Layer 4: Real-Time Delivery Layer
+Tanggung jawab: Push notification ke client browser yang sedang online
+Teknologi: WebSocket + Redis Pub/Sub
+Prinsip:
+
+Persistent Connection: Setiap user yang buka app, browser maintain WebSocket connection ke server
+Connection Pool: Server punya map: user_id → list of WebSocket connections (multi-device support)
+Push Mechanism: Server push JSON message via WebSocket, browser langsung update UI
+
+Strategy: Hub Pattern
+Hub adalah central coordinator untuk WebSocket connections:
+Konsep:
+
+Hub maintain registry of active connections
+When notification created, delivery service ask hub: "Apakah user X online?"
+If yes, push via WebSocket
+If no, skip (user will fetch via API when login next time)
+
+Multi-Instance Problem & Solution:
+Problem: Anda scale ke 3 API server instance. User A connect ke instance 1, notification untuk user A di-generate di instance 2. Bagaimana instance 2 kirim notifikasi ke user A yang connect di instance 1?
+Solution: Redis Pub/Sub
+
+Instance 2 tidak langsung push ke WebSocket (karena user tidak connect ke dia)
+Instead, publish message ke Redis channel: notifications:user_A
+Semua instance subscribe ke Redis
+Instance 1 (yang hold connection user A) receive message dari Redis, lalu push ke WebSocket user A
+
+Mental Model:
+Redis sebagai intercom system di building besar. Instance 2 bicara ke intercom "Ada paket untuk user A", instance 1 yang dengar dan deliver langsung ke user A yang ada di ruangannya.
+
+DATABASE STRATEGY
+Prinsip: Flexible Schema dengan Strong Structure
+Tables:
+1. notification_types (Configuration Table)
+Tujuan: Registry untuk map event ke notification
+Data: Code, display name, template, target type, channels, is_active
+Paradigm: Configuration over Convention
+Benefit: Add notification type = INSERT row, no deploy needed
+2. notifications (Transactional Table)
+Tujuan: Persistent storage untuk semua notification
+Data: User ID, type code, message, metadata (JSON), read status, timestamps
+Paradigm: Event Sourcing lite (notification adalah historical record)
+Benefit: Full audit trail, bisa query "notifikasi apa saja yang user X terima bulan lalu"
+3. user_notification_preferences (Optional)
+Tujuan: User preference untuk mute certain notifications
+Benefit: Personalization tanpa ubah core logic
+Index Strategy:
+
+Index pada (user_id, created_at) untuk query list notification
+Partial index pada (user_id, is_read) WHERE is_read = false untuk unread count
+Index pada type_code untuk filtering
+
+Metadata JSON Field:
+Ini trick untuk flexibility. Setiap notification punya field metadata (JSON) yang bisa simpan data arbitrary:
+
+Refund notification → metadata: {refund_id, amount, order_id}
+Note notification → metadata: {note_id, title}
+Login notification → metadata: {device, ip_address}
+
+Frontend bisa baca metadata untuk render action button atau navigasi yang tepat.
+
+SCALABILITY STRATEGY
+1. Horizontal Scaling
+Concept: Scale by adding more instances, not bigger machines
+Implementasi:
+
+Deploy 3 instance API server behind load balancer
+Deploy 3 instance Notification service (workers)
+NATS automatically load-balance event ke workers
+Redis coordinate WebSocket delivery antar API instances
+
+Tidak perlu shared state karena:
+
+Business logic stateless
+Notification generation stateless
+WebSocket connection di-coordinate via Redis
+
+2. Vertical Separation (Microservice)
+Concept: Notification system adalah separate microservice
+Benefit:
+
+Bisa scale independently (business service 5 instance, notification service 10 instance)
+Teknologi bisa beda (misalnya notification service nanti pakai Python untuk ML-based priority)
+Failure isolation (notification crash tidak ganggu order processing)
+
+3. Database Partitioning (Future)
+Concept: Saat notification table sudah jutaan rows
+Strategy:
+
+Partition by created_at (monthly partition)
+Archive old notification (>90 days) ke cold storage
+Keep unread notification indefinitely
+
+4. Caching Strategy
+Redis usage:
+
+Cache unread count per user (TTL 5 minutes)
+Cache recent 50 notifications per user (TTL 10 minutes)
+Invalidate cache on new notification
+
+Benefit: Reduce database read load 80-90%
+
+REGISTRATION PATTERN: Dynamic Notification
+Ini jawaban untuk "bagaimana register item baru secara simple":
+Strategy: Database-Driven Registry
+Concept:
+Semua notification types defined di database, bukan di code. Add notification type = database INSERT, not code deployment.
+Flow:
+Saat development:
+
+Developer bikin event baru di business service (e.g., NoteSharedEvent)
+Developer INSERT ke notification_types table:
+
+Code: NOTE_SHARED
+Template: {actor_name} shared note "{title}" with you
+Target: RECIPIENT (user yang di-share)
+Active: true
+
+
+Business service publish event
+Done. Notification auto-generated by notification service
+
+Saat production:
+Product manager mau add notification baru "daily note summary":
+
+PM masuk admin panel
+Create notification type via UI form
+System INSERT ke database
+Configure schedule trigger (bukan event-based, tapi cron-based)
+Done. No developer involved.
+
+Advanced: A/B Testing
+
+Create 2 notification types dengan template berbeda
+Flag variant: A dan variant: B
+Notification service randomly choose variant per user
+Track engagement per variant
+Product manager decide winner
+
+
+REAL-TIME DELIVERY MECHANISM
+Strategy: WebSocket + Fallback
+Primary: WebSocket
+Concept: Persistent bidirectional connection
+Flow:
+
+User login → Frontend establish WebSocket connection
+Server register connection: hub.register(user_id, connection)
+Connection stays alive selama user buka app
+Server push notification via connection
+User close app → Connection closed, hub unregister
+
+Fallback: Polling
+Concept: Frontend periodically fetch new notifications
+Flow:
+
+WebSocket disconnect (network issue, server restart)
+Frontend switch ke polling mode
+Every 30 seconds, hit API: GET /notifications?since=last_timestamp
+Display any new notification
+Background: attempt to reconnect WebSocket every 5 seconds
+
+Hybrid Approach (Recommended):
+
+WebSocket sebagai primary (real-time experience)
+Polling sebagai safety net (reliability)
+On app foreground, always fetch latest (handle case user offline saat notification created)
+
+
+FULL FLOW: REFUND REQUEST (Conceptual)
+Mari trace mental model dari user request refund sampai admin terima real-time:
+Act 1: User Action
+
+User buka app, klik "Request Refund" untuk order tertentu
+Frontend kirim HTTP POST request ke backend
+Request hit API Gateway, route ke RefundService
+
+Act 2: Business Logic
+
+RefundService validate request (order exists, belong to user, not already refunded)
+Create Refund entity (ID, user_id, order_id, amount, status=PENDING)
+Save entity ke database table refunds
+Critical moment: Service compose RefundRequestedEvent object
+Service call EventPublisher.Publish(event)
+EventPublisher serialize event jadi message, kirim ke NATS
+RefundService return success response ke frontend
+User browser show "Refund request submitted"
+
+Key Point: RefundService selesai sampai di sini. Dia tidak tahu akan jadi notifikasi.
+Act 3: Event Propagation
+
+NATS server receive event message di subject events.refund.requested
+NATS check: siapa yang subscribe subject ini?
+Found: NotificationService worker 1, worker 2, worker 3 (3 instances running)
+NATS pilih 1 worker secara round-robin, deliver event ke worker tersebut
+Worker receive event, trigger event handler
+
+Act 4: Notification Generation
+
+NotificationService handler receive RefundRequestedEvent
+Handler query database: SELECT * FROM notification_types WHERE code = 'REFUND_REQUESTED'
+Result: Configuration object dengan template, target_type=ADMIN, priority=HIGH
+Handler check: is_active = true → proceed
+Handler resolve target: Query SELECT user_id FROM users WHERE role = 'admin'
+Result: List of 3 admin user IDs
+For each admin ID:
+
+Render template dengan data dari event (username, amount)
+Create Notification object (id, user_id, type_code, message, metadata)
+INSERT notification ke database
+Call DeliveryService.Send(admin_id, notification)
+
+
+
+Act 5: Real-Time Delivery
+
+DeliveryService receive delivery task untuk admin_1
+Check: Apakah admin_1 currently online?
+Query Hub: hub.IsUserOnline(admin_1) → check connection pool
+Scenario A: Admin online di instance 1 (current instance)
+
+Hub push message directly via WebSocket
+Admin browser receive message instantly
+React state updated, bell badge +1, toast muncul
+
+
+Scenario B: Admin online di instance 2 (different instance)
+
+Publish message ke Redis channel notifications:admin_1
+Instance 2 subscribe Redis, receive message
+Instance 2 push via WebSocket ke admin_1
+
+
+Scenario C: Admin offline
+
+Skip push (notification already saved to DB)
+When admin login next time, fetch from DB
+
+
+
+Act 6: Admin See Notification
+
+Admin buka dashboard, bell icon show badge "1"
+Admin klik bell, dropdown show: "User Budi requested refund Rp100.000"
+Admin klik notification item, navigate ke /refunds/{id}
+Admin review detail, klik "Approve"
+
+Act 7: Reverse Flow (Admin Approve)
+
+Frontend POST /refunds/{id}/approve
+RefundService.ApproveRefund(refund_id, admin_id)
+Update database: refunds.status = APPROVED
+Publish RefundApprovedEvent (note: user_id = requester, actor_id = admin)
+Event masuk NATS → NotificationService
+Query registry: REFUND_APPROVED → target_type=SELF (send to requester)
+Create notification untuk requester user
+Save to DB, push via WebSocket (if online)
+User browser receive: "Your refund has been approved"
+
+
+MODERNITAS: WHY THIS ARCHITECTURE
+1. Loosely Coupled
+Business logic tidak coupled dengan notification. Besok mau tambah EmailService, SMSService yang dengar event yang sama? Tinggal subscribe, zero impact ke existing code.
+2. Scalable by Design
+Event-driven architecture naturally distributed. Add notification type tanpa deploy. Scale service independently.
+3. Fault Tolerant
+Message broker guarantee event delivery. Jika notification service down 5 menit, event queued di NATS, diproses begitu service up lagi.
+4. Testable
+Setiap layer bisa ditest independently:
+
+Business logic ditest tanpa perlu mock notification
+Notification service ditest dengan publish dummy event
+WebSocket delivery ditest dengan mock connection
+
+5. Observable
+Setiap layer bisa dimonitor:
+
+Event rate di NATS
+Processing latency di notification service
+WebSocket connection count
+Notification delivery rate
+
+6. Configuration Over Code
+PM bisa toggle notification on/off, change template, add new type via admin panel. No engineering bottleneck.
+
+PRINSIP DESAIN: SOLID + DDD
+Single Responsibility
+
+RefundService cuma handle refund domain
+NotificationService cuma handle notification domain
+WebSocket Hub cuma handle connection management
+
+Open/Closed
+
+System open for extension (add notification type)
+System closed for modification (no change existing service)
+
+Dependency Inversion
+
+Business service depend on EventPublisher interface
+Notification service depend on NotificationRepository interface
+Concrete implementation (NATS, PostgreSQL) injected, bisa swap tanpa ubah logic
+
+Domain-Driven Design
+
+Setiap bounded context (Refund, Note, Auth) punya service sendiri
+Event adalah domain event (ubiquitous language)
+Notification adalah separate domain, tidak campur dengan business domain
+
+
+MENTAL MODEL SUMMARY
+Notification System bukan fitur tambahan, tapi separate ecosystem.
+3 Pilar:
+
+Event Bus (nervous system) - NATS
+Configuration Registry (brain) - notification_types table
+Real-Time Channel (sensory organ) - WebSocket
+
+Flow:
+Business Action → Event → Message Broker → Notification Service → (Database + WebSocket) → User
+Scalability:
+Add notification = Database INSERT
+Scale system = Add instances
+Toggle feature = Update database flag
+Paradigm:
+Event-driven, configuration-driven, microservice-based, real-time by default.
+Apakah konsep ini sudah crystal clear tanpa kode?Oke sekarang berikan blue print lengkap untuk set up teknologinya saja kayak seperti install rabbit MQ ya pokoknya apa yang Anda jelasin di atas itu saya harus nge-setup apa dulu soalnya ini saya pakai os saya Windows 
+Jadi bukan ngoding ya ini semuanya berkaitan dengan set up apa yang dibutuhin 
+Pakai terminal saja ya full06.08Blueprint Setup Teknologi - Windows Terminal
+Ini step-by-step setup infrastructure untuk notification system. Semua via terminal Windows (PowerShell/CMD).
+
+PREREQUISITES
+1. Install Docker Desktop (WAJIB)
+Docker adalah cara termudah setup semua service di Windows tanpa ribet install manual.
+Download & Install:
+
+Download dari: https://www.docker.com/products/docker-desktop
+Install, restart komputer
+Buka Docker Desktop, tunggu sampai "Docker Desktop is running"
+
+Verify di PowerShell:
+powershelldocker --version
+docker-compose --version
+Harus muncul versi number (e.g., Docker version 24.0.x)
+
+PROJECT STRUCTURE
+Buat folder project Anda:
+powershellmkdir C:\Projects\notification-system
+cd C:\Projects\notification-system
+```
+
+Struktur yang akan kita buat:
+```
+notification-system/
+├── docker-compose.yml    # Orchestration semua services
+├── .env                  # Environment variables
+├── init-db/              # Database initialization scripts
+│   └── 01-schema.sql
+└── README.md
+
+SETUP INFRASTRUCTURE
+Step 1: Create docker-compose.yml
+Buat file docker-compose.yml di root folder project:
+powershellnotepad docker-compose.yml
+Copy paste isi file ini:
+yamlversion: '3.8'
+
+services:
+  # PostgreSQL - Main Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: notif_postgres
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notif_network
+
+  # Redis - Caching & Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: notif_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notif_network
+
+  # NATS - Message Broker
+  nats:
+    image: nats:2.10-alpine
+    container_name: notif_nats
+    ports:
+      - "4222:4222"  # Client connections
+      - "8222:8222"  # HTTP monitoring
+      - "6222:6222"  # Cluster connections
+    command: 
+      - "-js"        # Enable JetStream (persistent messaging)
+      - "-m=8222"    # Monitoring port
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notif_network
+
+  # PostgreSQL Admin UI (Optional - untuk development)
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: notif_pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@admin.com
+      PGADMIN_DEFAULT_PASSWORD: admin
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - notif_network
+
+  # Redis Commander (Optional - untuk development)
+  redis-commander:
+    image: rediscommander/redis-commander:latest
+    container_name: notif_redis_commander
+    environment:
+      REDIS_HOSTS: local:redis:6379
+    ports:
+      - "8081:8081"
+    depends_on:
+      - redis
+    networks:
+      - notif_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  notif_network:
+    driver: bridge
+Save file (Ctrl+S, close notepad).
+Penjelasan Services:
+
+postgres: Database utama untuk notification data
+redis: Caching + pub/sub untuk WebSocket coordination
+nats: Message broker untuk event streaming
+pgadmin: Web UI untuk manage PostgreSQL (opsional, untuk development)
+redis-commander: Web UI untuk monitor Redis (opsional, untuk development)
+
+
+Step 2: Create Database Schema
+Buat folder untuk init script:
+powershellmkdir init-db
+notepad init-db\01-schema.sql
+Copy paste SQL schema ini:
+sql-- Create notification types table
+CREATE TABLE notification_types (
+    id SERIAL PRIMARY KEY,
+    code VARCHAR(50) UNIQUE NOT NULL,
+    display_name VARCHAR(100) NOT NULL,
+    template TEXT NOT NULL,
+    target_type VARCHAR(20) NOT NULL,
+    target_role VARCHAR(50),
+    priority VARCHAR(10) DEFAULT 'MEDIUM',
+    channels JSONB DEFAULT '["web"]',
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP DEFAULT NOW(),
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Create notifications table
+CREATE TABLE notifications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    actor_id UUID,
+    type_code VARCHAR(50) NOT NULL,
+    entity_type VARCHAR(50),
+    entity_id UUID,
+    title VARCHAR(200) NOT NULL,
+    message TEXT NOT NULL,
+    metadata JSONB,
+    is_read BOOLEAN DEFAULT false,
+    read_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    
+    FOREIGN KEY (type_code) REFERENCES notification_types(code) ON DELETE CASCADE
+);
+
+-- Create indexes
+CREATE INDEX idx_notifications_user_created ON notifications(user_id, created_at DESC);
+CREATE INDEX idx_notifications_user_unread ON notifications(user_id, is_read) WHERE is_read = false;
+CREATE INDEX idx_notifications_type ON notifications(type_code);
+CREATE INDEX idx_notifications_entity ON notifications(entity_type, entity_id);
+
+-- Create user preferences table
+CREATE TABLE user_notification_preferences (
+    user_id UUID PRIMARY KEY,
+    muted_types TEXT[],
+    email_enabled BOOLEAN DEFAULT true,
+    push_enabled BOOLEAN DEFAULT true,
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Seed notification types
+INSERT INTO notification_types (code, display_name, template, target_type, priority) VALUES
+('USER_LOGIN', 'Login Activity', 'You logged in from {device} at {time}', 'SELF', 'LOW'),
+('NOTE_CREATED', 'Note Created', 'You created a note: "{title}"', 'SELF', 'LOW'),
+('NOTE_UPDATED', 'Note Updated', 'You updated note: "{title}"', 'SELF', 'LOW'),
+('NOTE_DELETED', 'Note Deleted', 'You deleted note: "{title}"', 'SELF', 'LOW'),
+('REFUND_REQUESTED', 'Refund Request', 'User {username} requested refund for {amount}', 'ADMIN', 'HIGH'),
+('REFUND_APPROVED', 'Refund Approved', 'Your refund request has been approved', 'SELF', 'HIGH'),
+('REFUND_REJECTED', 'Refund Rejected', 'Your refund request has been rejected. Reason: {reason}', 'SELF', 'HIGH');
+
+-- Create function for updating timestamp
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ language 'plpgsql';
+
+-- Create trigger for notification_types
+CREATE TRIGGER update_notification_types_updated_at 
+    BEFORE UPDATE ON notification_types 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Create trigger for user_notification_preferences
+CREATE TRIGGER update_user_preferences_updated_at 
+    BEFORE UPDATE ON user_notification_preferences 
+    FOR EACH ROW 
+    EXECUTE FUNCTION update_updated_at_column();
+Save file.
+
+Step 3: Create Environment File
+powershellnotepad .env
+Isi:
+env# PostgreSQL
+POSTGRES_HOST=localhost
+POSTGRES_PORT=5432
+POSTGRES_DB=notification_db
+POSTGRES_USER=admin
+POSTGRES_PASSWORD=admin123
+
+# Redis
+REDIS_HOST=localhost
+REDIS_PORT=6379
+
+# NATS
+NATS_URL=nats://localhost:4222
+
+# Application
+APP_ENV=development
+API_PORT=8080
+WEBSOCKET_PORT=8080
+Save file.
+
+Step 4: Start All Services
+Di PowerShell, di folder project:
+powershelldocker-compose up -d
+Flag -d = detached mode (run di background).
+Tunggu proses download images dan start containers (pertama kali bisa 5-10 menit tergantung internet).
+Verify semua container running:
+powershelldocker-compose ps
+```
+
+Output harus seperti ini:
+```
+NAME                    STATUS              PORTS
+notif_postgres          Up (healthy)        0.0.0.0:5432->5432/tcp
+notif_redis             Up (healthy)        0.0.0.0:6379->6379/tcp
+notif_nats              Up (healthy)        0.0.0.0:4222->4222/tcp, 0.0.0.0:8222->8222/tcp
+notif_pgadmin           Up                  0.0.0.0:5050->80/tcp
+notif_redis_commander   Up                  0.0.0.0:8081->8081/tcp
+Status harus "Up" dan "(healthy)" untuk postgres, redis, nats.
+
+Step 5: Verify Database Setup
+Check database via terminal:
+powershelldocker exec -it notif_postgres psql -U admin -d notification_db
+Anda akan masuk ke PostgreSQL shell. Test query:
+sql\dt
+Harus muncul list tables: notification_types, notifications, user_notification_preferences.
+Query notification types:
+sqlSELECT code, display_name FROM notification_types;
+Harus muncul 7 rows (USER_LOGIN, NOTE_CREATED, dll).
+Keluar dari PostgreSQL:
+sql\q
+
+Step 6: Verify Redis
+powershelldocker exec -it notif_redis redis-cli
+```
+
+Test command:
+```
+PING
+```
+
+Response harus: `PONG`
+
+Set test value:
+```
+SET test "hello"
+GET test
+```
+
+Response: `"hello"`
+
+Keluar:
+```
+EXIT
+
+Step 7: Verify NATS
+Check NATS monitoring UI:
+Buka browser: http://localhost:8222
+Anda akan lihat NATS monitoring dashboard dengan metrics:
+
+Connections
+Subscriptions
+Messages
+
+Jika muncul halaman monitoring = NATS running successfully.
+
+ACCESS UI TOOLS (Optional - untuk Development)
+PgAdmin (PostgreSQL UI):
+URL: http://localhost:5050
+Login:
+
+Email: admin@admin.com
+Password: admin
+
+Setup Connection ke Database:
+
+Klik kanan "Servers" → Create → Server
+Tab "General": Name = Notification DB
+Tab "Connection":
+
+Host: notif_postgres (nama container, bukan localhost)
+Port: 5432
+Database: notification_db
+Username: admin
+Password: admin123
+
+
+Save
+
+Sekarang Anda bisa browse tables, run queries via UI.
+
+Redis Commander (Redis UI):
+URL: http://localhost:8081
+Langsung bisa browse Redis keys, values, monitor commands.
+
+COMMON COMMANDS
+Stop All Services:
+powershelldocker-compose stop
+Services stop tapi data tetap persisted.
+
+Start All Services (setelah stop):
+powershelldocker-compose start
+
+Restart Specific Service:
+powershelldocker-compose restart postgres
+docker-compose restart redis
+docker-compose restart nats
+
+View Logs:
+All services:
+powershelldocker-compose logs -f
+Specific service:
+powershelldocker-compose logs -f postgres
+docker-compose logs -f nats
+docker-compose logs -f redis
+Flag -f = follow (stream logs real-time). Ctrl+C untuk stop.
+
+Destroy All (DANGER - delete data):
+powershelldocker-compose down -v
+Flag -v = delete volumes (persistent data). Hanya gunakan jika mau reset semuanya.
+
+Rebuild (jika update docker-compose.yml):
+powershelldocker-compose down
+docker-compose up -d --build
+
+VERIFY PORTS
+Check port yang dibuka:
+powershellnetstat -an | findstr "5432 6379 4222 8222"
+Harus muncul:
+
+0.0.0.0:5432 (PostgreSQL)
+0.0.0.0:6379 (Redis)
+0.0.0.0:4222 (NATS client)
+0.0.0.0:8222 (NATS monitoring)
+
+
+TROUBLESHOOTING
+Problem: Port already in use
+Error: Bind for 0.0.0.0:5432 failed: port is already allocated
+Solution:
+Cek process yang pakai port:
+powershellnetstat -ano | findstr :5432
+Note PID (angka paling kanan), kill process:
+powershelltaskkill /PID <PID> /F
+Or, ubah port di docker-compose.yml:
+yamlpostgres:
+  ports:
+    - "5433:5432"  # External:Internal
+
+Problem: Container unhealthy
+Check logs:
+powershelldocker-compose logs postgres
+Biasanya issue: insufficient memory, disk space, atau configuration error.
+
+Problem: Database schema tidak ter-create
+Manual run schema:
+powershelldocker exec -i notif_postgres psql -U admin -d notification_db < init-db/01-schema.sql
+```
+
+---
+
+## **CONNECTION STRINGS (untuk Golang Backend nanti)**
+
+Simpan ini untuk nanti connect dari aplikasi:
+
+**PostgreSQL:**
+```
+postgres://admin:admin123@localhost:5432/notification_db?sslmode=disable
+```
+
+**Redis:**
+```
+redis://localhost:6379
+```
+
+**NATS:**
+```
+nats://localhost:4222
+
+HEALTH CHECK SCRIPT
+Buat script untuk quick check semua service:
+powershellnotepad healthcheck.ps1
+Isi:
+powershellWrite-Host "=== Infrastructure Health Check ===" -ForegroundColor Cyan
+
+Write-Host "`nChecking Docker..." -ForegroundColor Yellow
+docker --version
+
+Write-Host "`nChecking Containers..." -ForegroundColor Yellow
+docker-compose ps
+
+Write-Host "`nChecking PostgreSQL..." -ForegroundColor Yellow
+docker exec notif_postgres pg_isready -U admin
+
+Write-Host "`nChecking Redis..." -ForegroundColor Yellow
+docker exec notif_redis redis-cli PING
+
+Write-Host "`nChecking NATS..." -ForegroundColor Yellow
+Invoke-WebRequest -Uri http://localhost:8222/healthz -UseBasicParsing | Select-Object -ExpandProperty StatusCode
+
+Write-Host "`n=== All checks complete ===" -ForegroundColor Green
+Save, run:
+powershellpowershell -ExecutionPolicy Bypass -File healthcheck.ps1
+
+FINAL VERIFICATION CHECKLIST
+Jalankan command ini satu-satu:
+powershell# 1. All containers running
+docker-compose ps
+
+# 2. PostgreSQL accessible
+docker exec -it notif_postgres psql -U admin -d notification_db -c "SELECT COUNT(*) FROM notification_types;"
+
+# 3. Redis accessible
+docker exec -it notif_redis redis-cli PING
+
+# 4. NATS accessible
+curl http://localhost:8222/varz
+Jika semua sukses = Infrastructure siap 100%.
+
+NEXT STEPS (setelah setup selesai)
+
+Backend Golang: Connect ke PostgreSQL, Redis, NATS menggunakan connection strings di atas
+Frontend React: Connect ke WebSocket endpoint (nanti backend expose di ws://localhost:8080/ws)
+Development workflow:
+
+Start: docker-compose up -d
+Develop aplikasi
+Stop: docker-compose stop
+
+
+
+
+RESOURCE MONITORING
+Check resource usage:
+powershelldocker stats
+Output live update CPU, Memory, Network usage per container. Ctrl+C untuk stop.
+
+BACKUP & RESTORE (untuk production nanti)
+Backup PostgreSQL:
+powershelldocker exec notif_postgres pg_dump -U admin notification_db > backup.sql
+Restore:
+powershelldocker exec -i notif_postgres psql -U admin -d notification_db < backup.sql
+Backup Redis:
+powershelldocker exec notif_redis redis-cli BGSAVE
+docker cp notif_redis:/data/dump.rdb ./redis-backup.rdb
+
+PRODUCTION CONSIDERATIONS
+Untuk production, Anda perlu:
+
+Change default passwords di docker-compose.yml
+Enable SSL/TLS untuk PostgreSQL, Redis
+Setup Redis Cluster (multiple nodes)
+Setup NATS Cluster (multiple nodes)
+Use managed services (AWS RDS, ElastiCache, etc.) instead of self-hosted
+
+Tapi untuk development/learning, setup ini sudah perfect.
+
+SUMMARY
+Yang sudah di-setup:
+✅ PostgreSQL (database) - Port 5432
+✅ Redis (cache + pub/sub) - Port 6379
+✅ NATS (message broker) - Port 4222
+✅ Database schema dengan notification tables
+✅ Monitoring tools (PgAdmin, Redis Commander)
+Total waktu setup: ~15-20 menit (first time dengan download images)
+Daily usage:
+powershell# Morning: Start
+docker-compose start
+
+# Night: Stop
+docker-compose stop
+Sudah clear? Ada yang perlu dijelaskan lebih detail untuk setupnya?Turn on web search in Search and tools menu. Otherwise, links provided may not be accurate or up to date.Redis itu di download dari doker ya?06.10Ya Benar! Redis di-download dari Docker
+Saya jelaskan konsepnya:
+
+KONSEP DOCKER IMAGE
+Apa yang Terjadi Saat docker-compose up:
+
+Docker membaca file docker-compose.yml
+Cek setiap service, contoh untuk Redis:
+
+yaml   redis:
+     image: redis:7-alpine
+
+Docker cek: Apakah image redis:7-alpine sudah ada di komputer lokal?
+Jika BELUM ada: Docker otomatis download dari Docker Hub (registry publik)
+Jika SUDAH ada: Langsung pakai image yang sudah di-download sebelumnya
+Create container dari image tersebut
+Start container dengan konfigurasi yang Anda tentukan (ports, volumes, dll)
+
+
+REDIS TIDAK TERINSTALL LANGSUNG DI WINDOWS
+Penting dipahami:
+
+Redis TIDAK terinstall native di Windows Anda
+Redis berjalan di dalam container Docker (isolated environment)
+Container adalah seperti "mini virtual machine" yang sangat ringan
+Redis di dalam container ini punya OS sendiri (Alpine Linux)
+
+Analogi:
+
+Windows Anda = gedung
+Docker = kamar-kamar terpisah di dalam gedung
+Redis container = kamar A yang punya Redis di dalamnya
+PostgreSQL container = kamar B yang punya PostgreSQL
+NATS container = kamar C yang punya NATS
+
+Setiap kamar isolated, tapi bisa komunikasi lewat network.
+
+DOCKER HUB: Repository Images
+Docker Hub: https://hub.docker.com
+Ini adalah "App Store" untuk Docker images. Semua official images ada di sini:
+
+Redis: https://hub.docker.com/_/redis
+PostgreSQL: https://hub.docker.com/_/postgres
+NATS: https://hub.docker.com/_/nats
+
+Saat Anda pakai image: redis:7-alpine, Docker otomatis download dari Docker Hub.
+
+CEK IMAGE YANG SUDAH DI-DOWNLOAD
+Setelah Anda run docker-compose up, cek images:
+powershelldocker images
+```
+
+Output akan seperti ini:
+```
+REPOSITORY              TAG            IMAGE ID       SIZE
+redis                   7-alpine       a1b2c3d4e5f6   30MB
+postgres                15-alpine      f6e5d4c3b2a1   230MB
+nats                    2.10-alpine    b2a1f6e5d4c3   15MB
+dpage/pgadmin4          latest         c3b2a1f6e5d4   350MB
+rediscommander/redis    latest         d4c3b2a1f6e5   120MB
+```
+
+Ini adalah images yang sudah di-download dan disimpan di komputer Anda.
+
+---
+
+## **DIMANA IMAGE DISIMPAN?**
+
+Di Windows, Docker menyimpan images di:
+
+**Path (default):**
+```
+C:\ProgramData\DockerDesktop\vm-data\
+Tapi Anda tidak perlu akses manual folder ini. Docker handle semuanya.
+
+UKURAN DOWNLOAD
+Saat pertama kali docker-compose up, Docker akan download:
+ServiceImageSize (approx)PostgreSQLpostgres:15-alpine~230 MBRedisredis:7-alpine~30 MBNATSnats:2.10-alpine~15 MBPgAdmindpage/pgadmin4~350 MBRedis Commanderrediscommander/redis-commander~120 MB
+Total download: ~745 MB (first time only)
+Setelah di-download sekali, tidak perlu download lagi kecuali Anda update versi atau delete images.
+
+KENAPA PAKAI DOCKER?
+Alternative: Install Manual di Windows
+Tanpa Docker (manual install):
+
+Redis: Tidak ada official installer untuk Windows. Harus pakai WSL2 atau build from source atau pakai port unofficial.
+NATS: Install binary Windows, setup sebagai service, config manual.
+PostgreSQL: Download installer, install, config, setup as service.
+
+Ribet: Different installers, different configs, sulit manage versions, sulit cleanup.
+
+Dengan Docker:
+powershelldocker-compose up -d
+1 command, semua jalan. Dan saat tidak pakai:
+powershelldocker-compose down
+1 command, semua bersih.
+
+DOCKER vs INSTALL NATIVE
+AspekDockerInstall NativeSetup1 commandDownload installers, run setup wizard untuk masing-masingIsolationSetiap service isolatedSemua jadi Windows service, bisa conflictCleanupdocker-compose down -vUninstall satu-satu, manual delete dataVersion ManagementGanti image: redis:7 ke redis:6, restartUninstall, install versi lainPort ConflictEasy remap di docker-composeManual config di setiap softwareCross-platformSame setup di Windows/Mac/LinuxBeda installer tiap OS
+
+APAKAH REDIS BISA DIAKSES DARI LUAR CONTAINER?
+Ya, karena port mapping:
+yamlredis:
+  ports:
+    - "6379:6379"  # Host:Container
+Artinya:
+
+6379 kiri = Port di Windows Anda (localhost)
+6379 kanan = Port di dalam container
+
+Jadi aplikasi Golang Anda yang jalan di Windows bisa connect ke Redis via localhost:6379, seolah-olah Redis terinstall native.
+
+CEK REDIS ACCESSIBLE DARI WINDOWS
+Method 1: Via Docker Exec (recommended)
+powershelldocker exec -it notif_redis redis-cli
+Ini masuk ke dalam container Redis, lalu jalankan redis-cli.
+Method 2: Install Redis CLI di Windows (opsional)
+Jika Anda mau akses Redis CLI langsung dari Windows tanpa docker exec:
+Download redis-cli.exe:
+https://github.com/microsoftarchive/redis/releases
+Extract, lalu:
+powershell.\redis-cli.exe -h localhost -p 6379
+```
+
+Tapi ini **tidak wajib**, karena `docker exec` lebih praktis.
+
+---
+
+## **FLOW SAAT `docker-compose up` (DETAIL)**
+```
+1. Docker baca docker-compose.yml
+   ↓
+2. Parse service definitions (postgres, redis, nats, dll)
+   ↓
+3. Cek network "notif_network" → create jika belum ada
+   ↓
+4. Cek volumes (postgres_data, redis_data) → create jika belum ada
+   ↓
+5. Untuk setiap service:
+   ├── Cek image (redis:7-alpine)
+   ├── Jika belum ada → download dari Docker Hub
+   ├── Create container dari image
+   ├── Mount volumes
+   ├── Setup network
+   ├── Map ports (6379:6379)
+   └── Start container
+   ↓
+6. Run healthchecks
+   ↓
+7. Services ready!
+```
+
+**Log yang muncul saat download:**
+```
+Pulling redis (redis:7-alpine)...
+7-alpine: Pulling from library/redis
+619be1103602: Pull complete
+a5a08aae2927: Pull complete
+...
+Status: Downloaded newer image for redis:7-alpine
+
+MANAGE IMAGES
+List images:
+powershelldocker images
+Remove unused images:
+powershelldocker image prune -a
+WARNING: Ini hapus semua images yang tidak dipakai. Image akan di-download lagi next time.
+Remove specific image:
+powershelldocker rmi redis:7-alpine
+Pull/update image manually:
+powershelldocker pull redis:7-alpine
+Ini download versi terbaru tanpa start container.
+
+NETWORK ANTAR CONTAINER
+Container dalam docker-compose.yml bisa komunikasi via network internal:
+yamlnetworks:
+  notif_network:
+    driver: bridge
+Contoh:
+
+Golang backend container bisa akses Redis via hostname: redis:6379 (bukan localhost)
+Golang backend container bisa akses PostgreSQL via: postgres:5432
+
+Hostname = nama service di docker-compose.yml.
+Tapi dari Windows host, Anda tetap pakai localhost:6379 karena port di-map.
+
+ALTERNATIVE: Beli Managed Services
+Jika tidak mau ribet manage infrastructure sendiri (untuk production):
+Redis:
+
+AWS ElastiCache
+Azure Cache for Redis
+Redis Cloud (official)
+Upstash (serverless)
+
+PostgreSQL:
+
+AWS RDS
+Azure Database for PostgreSQL
+Google Cloud SQL
+Supabase (includes PostgreSQL)
+
+NATS:
+
+Synadia NGS (NATS Global Service)
+Self-hosted di Kubernetes
+
+Keuntungan managed services:
+
+Automatic backups
+High availability
+Scaling dengan klik button
+Monitoring built-in
+
+Kekurangan:
+
+Biaya bulanan
+Vendor lock-in
+
+Untuk learning/development: Docker lokal adalah pilihan terbaik.
+
+SUMMARY
+✅ Redis di-download otomatis dari Docker Hub saat docker-compose up
+✅ Tidak perlu install Redis native di Windows
+✅ Redis jalan di dalam container (isolated environment)
+✅ Accessible dari Windows via localhost:6379 karena port mapping
+✅ Image disimpan lokal, tidak perlu download ulang next time
+✅ Easy cleanup: docker-compose down hapus containers, docker-compose down -v hapus data
+Analogi sederhana:
+
+Docker Desktop = "App Store" client
+Docker Hub = "App Store" server
+docker-compose up = "Download & Install" multiple apps sekaligus
+Container = Apps yang jalan isolated
+docker-compose down = "Uninstall" apps
+
+Sudah jelas konsepnya?Turn on web search in Search and tools menu. Otherwise, links provided may not be accurate or up to date.Kemudian apakah kita memakai message broker ? Anda ngejelasin dari tadi apakah ada seperti rabbit MQ gitu06.12Ya! Kita SUDAH PAKAI Message Broker: NATS
+Saya jelaskan karena kayaknya ini membingungkan.
+
+KLARIFIKASI: NATS = MESSAGE BROKER
+Di docker-compose.yml yang saya berikan, ada service ini:
+yamlnats:
+  image: nats:2.10-alpine
+  container_name: notif_nats
+  ports:
+    - "4222:4222"  # Client connections
+    - "8222:8222"  # HTTP monitoring
+NATS adalah MESSAGE BROKER, sama seperti RabbitMQ atau Kafka.
+
+PERBANDINGAN MESSAGE BROKERS
+Pilihan Message Broker Populer:
+Message BrokerKelebihanKekuranganUse CaseNATSSangat ringan (~15MB), super cepat, native Golang support, simpleFitur lebih minimalisMicroservices, real-time messaging, IoTRabbitMQMature, banyak fitur (routing, priority queue), GUI managementLebih berat (~200MB), sedikit lebih lambatEnterprise apps, complex routingKafkaExtreme scalability, event streaming, replay capabilityVery heavy (~500MB+), complex setup, overkill untuk small-mediumBig data, log aggregation, millions msg/secRedis Pub/SubSangat cepat, already have RedisNo persistence, no guarantee deliverySimple real-time notifications
+
+KENAPA SAYA PILIH NATS?
+Alasan Teknis:
+
+Native Golang Support
+NATS ditulis dalam Golang, library client juga Golang. Perfect match dengan backend Anda.
+Lightweight
+Image size: 15MB vs RabbitMQ: 200MB vs Kafka: 500MB+
+Simple Yet Powerful
+API sangat simple, tapi fitur lengkap untuk use case notification system.
+Performance
+NATS bisa handle millions messages per second. Notification system Anda butuh ratusan-ribuan per detik = overkill bahkan.
+JetStream (Persistence)
+NATS punya fitur JetStream untuk persistent messaging, guarantee delivery. Saya sudah enable di docker-compose dengan flag -js.
+Modern
+NATS adalah generasi baru message broker yang designed untuk cloud-native architecture.
+
+
+NATS vs RABBITMQ: DETAIL COMPARISON
+RabbitMQ:
+Kelebihan:
+
+Management UI yang bagus (web-based)
+Banyak routing patterns (direct, topic, fanout, headers)
+Dead letter queues (DLQ)
+Priority queues
+Plugin ecosystem
+
+Kekurangan:
+
+Resource heavy (RAM usage tinggi)
+Erlang-based (kompilasi lebih lama)
+Sedikit lebih lambat dibanding NATS
+
+Use Case Ideal:
+
+Enterprise systems dengan complex routing
+Butuh advanced queue features
+Team sudah familiar dengan RabbitMQ
+
+
+NATS:
+Kelebihan:
+
+Sangat ringan dan cepat
+Simple API (pub/sub, request/reply, queue groups)
+JetStream untuk persistence
+Native observability
+Cloud-native design
+
+Kekurangan:
+
+Management UI lebih basic (monitoring only, bukan management)
+Fitur routing tidak sekompleks RabbitMQ
+Ekosistem lebih kecil
+
+Use Case Ideal:
+
+Microservices communication
+Real-time messaging
+Golang ecosystem
+Performance-critical systems
+
+
+UNTUK NOTIFICATION SYSTEM: NATS LEBIH COCOK
+Kebutuhan Notification System:
+
+✅ Pub/Sub simple - Satu event, multiple subscribers (notification service, email service, analytics service)
+✅ Fast delivery - Notifikasi harus sampai dalam milliseconds
+✅ Lightweight - Tidak perlu resource besar
+✅ Persistence (optional) - JetStream provide this
+❌ Complex routing - Tidak perlu
+❌ Priority queues - Tidak critical
+❌ Dead letter queues - Handle di application level
+
+NATS memenuhi semua kebutuhan tanpa overhead yang tidak perlu.
+
+JIKA ANDA TETAP INGIN RABBITMQ
+Saya berikan alternative docker-compose untuk RabbitMQ:
+Ganti Service NATS dengan RabbitMQ:
+yaml# Hapus/comment service nats, tambahkan ini:
+rabbitmq:
+  image: rabbitmq:3-management-alpine
+  container_name: notif_rabbitmq
+  environment:
+    RABBITMQ_DEFAULT_USER: admin
+    RABBITMQ_DEFAULT_PASS: admin123
+  ports:
+    - "5672:5672"   # AMQP protocol
+    - "15672:15672" # Management UI
+  volumes:
+    - rabbitmq_data:/var/lib/rabbitmq
+  healthcheck:
+    test: ["CMD", "rabbitmq-diagnostics", "ping"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+  networks:
+    - notif_network
+
+volumes:
+  rabbitmq_data:
+```
+
+**Management UI:** http://localhost:15672  
+**Login:** admin / admin123
+
+**Connection String untuk Golang:**
+```
+amqp://admin:admin123@localhost:5672/
+```
+
+---
+
+## **PERBANDINGAN PRAKTIS**
+
+### **Scenario: 1000 notifications per menit**
+
+**NATS:**
+- Latency: < 1ms
+- Memory usage: ~50MB
+- CPU: ~5%
+
+**RabbitMQ:**
+- Latency: ~5ms
+- Memory usage: ~150MB
+- CPU: ~10%
+
+**Kafka:**
+- Latency: ~10ms
+- Memory usage: ~500MB+
+- CPU: ~20%
+
+Untuk notification system dengan traffic moderate, **NATS adalah sweet spot**.
+
+---
+
+## **PATTERN YANG DIPAKAI**
+
+### **Pub/Sub Pattern (NATS Implementation):**
+
+**Publisher (Business Service):**
+```
+RefundService → Publish event ke subject "events.refund.requested"
+                ↓
+              NATS Broker
+                ↓
+    ┌───────────┴───────────┬─────────────┐
+    ↓                       ↓             ↓
+NotificationService   EmailService   AnalyticsService
+(subscribe)           (subscribe)     (subscribe)
+```
+
+**Konsep:**
+- Publisher tidak tahu ada berapa subscriber
+- Publisher tidak tunggu subscriber selesai
+- Subscriber bisa ditambah/dikurangi tanpa impact publisher
+- Decoupling total
+
+---
+
+### **Subject Naming Convention (NATS):**
+```
+events.{domain}.{action}
+
+Contoh:
+- events.refund.requested
+- events.refund.approved
+- events.refund.rejected
+- events.note.created
+- events.note.updated
+- events.user.login
+```
+
+**Wildcard Subscribe:**
+```
+events.*            → All events
+events.refund.*     → All refund events
+events.*.created    → All creation events
+```
+
+Notification service bisa subscribe `events.*` untuk listen semua event.
+
+---
+
+### **Queue Groups (Load Balancing):**
+
+Jika Anda deploy 3 instance notification service:
+```
+NATS Broker
+    ↓
+    Subscribe: "events.*" with queue group "notif-workers"
+    ↓
+┌───────┴─────┬──────────┐
+↓             ↓          ↓
+Worker 1    Worker 2   Worker 3
+NATS automatically distribute events round-robin ke workers. Built-in load balancing.
+RabbitMQ equivalent: Competing consumers pattern.
+
+FITUR NATS JETSTREAM
+Saya sudah enable JetStream di docker-compose dengan flag -js:
+yamlcommand: 
+  - "-js"        # Enable JetStream
+Apa itu JetStream?
+Standard NATS (Core):
+
+Pure pub/sub
+In-memory only
+Fire-and-forget
+Jika subscriber offline, message hilang
+
+NATS JetStream:
+
+Persistent messaging
+At-least-once delivery guarantee
+Message replay capability
+Consumer acknowledgment
+
+Use Case untuk Notification System:
+Scenario: Notification service crash selama 5 menit.
+Without JetStream:
+
+Events yang di-publish selama 5 menit = hilang
+Notifikasi tidak ter-generate
+
+With JetStream:
+
+Events disimpan di stream
+Saat notification service up lagi, process backlog events
+Notifikasi ter-generate untuk semua events
+
+
+MONITORING NATS
+Web UI Monitoring:
+URL: http://localhost:8222
+Endpoints:
+
+/varz - Server info
+/connz - Connections
+/subsz - Subscriptions
+/routez - Routes
+
+Example check via PowerShell:
+powershellcurl http://localhost:8222/varz
+Output: JSON dengan stats server.
+
+CLI Monitoring:
+powershell# Masuk ke container NATS
+docker exec -it notif_nats sh
+
+# Install nats CLI (inside container)
+wget https://github.com/nats-io/natscli/releases/download/v0.1.1/nats-0.1.1-linux-amd64.zip
+unzip nats-0.1.1-linux-amd64.zip
+./nats --version
+
+# Check server info
+./nats server info
+
+# List streams (JetStream)
+./nats stream list
+
+# Monitor real-time
+./nats events
+
+JIKA INGIN GANTI KE RABBITMQ NANTI
+Karena architecture event-driven dengan abstraction (EventPublisher interface), ganti message broker tidak impact business logic.
+Steps:
+
+Stop NATS container: docker-compose stop nats
+Update docker-compose.yml dengan RabbitMQ service
+Start RabbitMQ: docker-compose up -d rabbitmq
+Update Golang infrastructure layer (ganti NATS client dengan RabbitMQ client)
+Business services tidak perlu diubah (mereka tetap call publisher.Publish(event))
+
+Ini benefit dari Dependency Inversion Principle.
+
+SETUP VERIFICATION: NATS
+Check NATS Running:
+powershelldocker ps | findstr nats
+```
+
+Output:
+```
+notif_nats   Up (healthy)   0.0.0.0:4222->4222/tcp, 0.0.0.0:8222->8222/tcp
+Check NATS Logs:
+powershelldocker logs notif_nats
+```
+
+Output harus ada:
+```
+[1] 2024/01/01 10:00:00.000000 [INF] Starting nats-server
+[1] 2024/01/01 10:00:00.000000 [INF]   Version:  2.10.x
+[1] 2024/01/01 10:00:00.000000 [INF] JetStream enabled
+[1] 2024/01/01 10:00:00.000000 [INF] Listening for client connections on 0.0.0.0:4222
+[1] 2024/01/01 10:00:00.000000 [INF] Server is ready
+"JetStream enabled" = Persistence aktif.
+Test Publish/Subscribe (Manual):
+Terminal 1 - Subscriber:
+powershelldocker exec -it notif_nats sh -c "nats sub 'test.subject'"
+Terminal 2 - Publisher:
+powershelldocker exec -it notif_nats sh -c "nats pub 'test.subject' 'Hello from NATS!'"
+```
+
+**Terminal 1 harus menerima message:** `Hello from NATS!`
+
+Jika berhasil = NATS working perfectly.
+
+---
+
+## **FINAL ANSWER: APAKAH KITA PAKAI MESSAGE BROKER?**
+
+# **YA! Kita SUDAH PAKAI Message Broker: NATS**
+
+**Setup yang saya berikan sudah include:**
+✅ PostgreSQL (database)  
+✅ Redis (cache + pub/sub untuk WebSocket)  
+✅ **NATS (message broker untuk event streaming)** ← INI MESSAGE BROKER  
+
+**NATS dipilih karena:**
+- Lightweight & fast
+- Native Golang support
+- Perfect untuk notification system use case
+- Modern cloud-native architecture
+- JetStream untuk persistence
+
+**Jika Anda prefer RabbitMQ atau Kafka, bisa ganti. Tapi untuk notification system, NATS adalah best choice.**
+
+---
+
+## **ARCHITECTURE RECAP**
+```
+Business Service (Golang)
+    ↓ publish event
+NATS Message Broker  ← INI YANG ANDA TANYAKAN
+    ↓ distribute event
+Notification Service (Golang)
+    ↓ create notification
+PostgreSQL (save) + WebSocket (push)
+    ↓
+User Browser

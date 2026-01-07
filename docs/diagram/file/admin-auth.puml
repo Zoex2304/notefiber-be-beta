@@ -1,0 +1,177 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **Admin Authentication & Session Flow**\nAdmin-Specific Authentication, Middleware & Session Management
+header Admin Authentication Sequence
+footer Page 1 of 1
+
+actor "Admin Client" as Client
+boundary "Server" as Server
+control "Auth Controller" as Controller
+control "Auth Service" as AuthService
+control "Admin Middleware" as Middleware
+entity "User Repository" as UserRepo
+control "Bcrypt Validator" as Bcrypt
+control "JWT Generator" as JWT
+control "SHA256 Hasher" as Hasher
+database "Database" as DB
+
+autonumber "<b>[000]"
+
+== ADMIN LOGIN ==
+
+Client -[#CC3300]> Server : HTTP POST /api/admin/login\n{email, password, remember_me}
+activate Client
+activate Server
+
+Server -[#CC3300]> Controller : Parse LoginRequest
+activate Controller
+
+Controller -> Controller : Extract Login Credentials
+Controller -[#CC3300]> AuthService : LoginAdmin
+activate AuthService
+
+AuthService -[#CC3300]> UserRepo : Find User by Email
+activate UserRepo
+UserRepo -[#CC3300]> DB : SELECT * FROM users WHERE email=?
+activate DB
+DB -[#006600]-> UserRepo : User Data
+deactivate DB
+UserRepo -[#006600]-> AuthService : User Entity
+deactivate UserRepo
+
+AuthService -> AuthService : Validate: Role == "admin"
+alt Role != "admin"
+    AuthService -> AuthService : Throw "access denied: admins only"
+else Role == "admin"
+    AuthService -[#CC6600]> Bcrypt : Validate: Password (bcrypt)
+    activate Bcrypt
+    Bcrypt -[#006600]-> AuthService : Password Valid/Invalid
+    deactivate Bcrypt
+    
+    alt Password Invalid
+        AuthService -> AuthService : Throw "invalid credentials"
+    else Password Valid
+        AuthService -> AuthService : Validate: Status != blocked
+        alt Status == "blocked"
+            AuthService -> AuthService : Throw "admin account is blocked"
+        else Status OK
+            AuthService -[#CC6600]> JWT : Generate: JWT with role claim
+            activate JWT
+            JWT -[#006600]-> AuthService : Access Token (24h)
+            deactivate JWT
+            
+            alt remember_me = true
+                AuthService -> AuthService : Generate Refresh Token (UUID)
+                AuthService -[#CC6600]> Hasher : SHA256(token) for storage
+                activate Hasher
+                Hasher -[#006600]-> AuthService : Token Hash
+                deactivate Hasher
+                
+                AuthService -> AuthService : Store in Database\nwith IP + User Agent
+                AuthService -> AuthService : Set Expiry: 30 days for admin sessions
+            end
+            
+            AuthService -> AuthService : Build LoginResponse DTO
+            AuthService -[#006600]> Controller : AccessToken + User
+        end
+    end
+end
+deactivate AuthService
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan AccessToken + User
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{\n  success: true,\n  data: {\n    access_token: "...",\n    refresh_token: "..."?,\n    user: {...}\n  }\n}
+deactivate Server
+deactivate Client
+
+== ADMIN MIDDLEWARE (On Protected Routes) ==
+
+Client -[#CC3300]> Server : HTTP Request to /api/admin/users
+activate Client
+activate Server
+
+Server -[#CC3300]> Middleware : Extract Bearer Token
+activate Middleware
+
+Middleware -> Middleware : Get Authorization Header
+Middleware -> Middleware : Extract JWT Token
+Middleware -[#CC6600]> JWT : Parse & Validate JWT
+activate JWT
+JWT -> JWT : Verify Signature
+JWT -[#006600]-> Middleware : JWT Claims {user_id, role, exp}
+deactivate JWT
+
+Middleware -> Middleware : Extract role claim
+Middleware -> Middleware : Validate: role == "admin"
+alt role != "admin"
+    Middleware -> Middleware : Return 403 Forbidden
+    Middleware -[#990000]> Server : 403 Forbidden
+    deactivate Middleware
+    Server -[#990000]> Client : 403 Access Denied
+    deactivate Server
+    deactivate Client
+else role == "admin"
+    Middleware -> Middleware : Store: user_id in Context Locals
+    Middleware -> Middleware : Store: admin role in Context
+    Middleware -[#006600]> Server : Proceed to Handler
+    deactivate Middleware
+    
+    Server -[#CC3300]> Controller : Admin Route Handler
+    activate Controller
+    Controller -> Controller : Process Request
+    Controller -[#006600]> Server : HTTP Response
+    deactivate Controller
+    
+    Server -[#006600]> Client : 200 OK (Admin Data)
+    deactivate Server
+    deactivate Client
+end
+
+== SESSION MANAGEMENT ==
+
+note over Client, DB : Refresh Token Flow
+note over Client, DB : Store: SHA256(token) in Database
+note over Client, DB : Associate: IP Address + User Agent
+note over Client, DB : Expiry: 30 days for admin sessions
+
+group Refresh Token Validation Example
+    Client -[#CC3300]> Server : POST /api/auth/refresh-token\n{refresh_token: "abc123..."}
+    Server -[#CC3300]> AuthService : Validate Refresh Token
+    activate AuthService
+    
+    AuthService -[#CC6600]> Hasher : SHA256(refresh_token)
+    activate Hasher
+    Hasher -[#006600]-> AuthService : Token Hash
+    deactivate Hasher
+    
+    AuthService -[#CC3300]> UserRepo : Find Refresh Token by Hash
+    activate UserRepo
+    UserRepo -[#CC3300]> DB : SELECT * FROM user_refresh_tokens\nWHERE token_hash=? AND revoked=false\nAND expires_at > NOW()
+    activate DB
+    DB -[#006600]-> UserRepo : Refresh Token Record\nwith IP + User Agent
+    deactivate DB
+    UserRepo -[#006600]-> AuthService : Valid Token
+    deactivate UserRepo
+    
+    AuthService -[#CC6600]> JWT : Generate New Access Token
+    activate JWT
+    JWT -[#006600]-> AuthService : New JWT
+    deactivate JWT
+    
+    AuthService -[#006600]> Server : New Access Token
+    deactivate AuthService
+    Server -[#006600]> Client : 200 OK with new token
+end
+
+@enduml

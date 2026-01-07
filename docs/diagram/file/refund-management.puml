@@ -1,0 +1,247 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **Refund Management Flow**\nUser Refund Requests & Admin Refund Processing
+header Refund Management Sequence
+footer Page 1 of 1
+
+actor "User Client" as UserClient
+actor "Admin Client" as AdminClient
+boundary "Server" as Server
+control "User Controller" as UserCtrl
+control "Admin Controller" as AdminCtrl
+control "User Service" as UserService
+control "Admin Service" as AdminService
+entity "Subscription Repository" as SubRepo
+entity "Refund Repository" as RefundRepo
+entity "Plan Repository" as PlanRepo
+database "Database" as DB
+control "Logger" as Logger
+
+autonumber "<b>[000]"
+
+== USER REQUEST REFUND ==
+
+UserClient -[#CC3300]> Server : HTTP POST /api/user/refund\n{subscription_id, reason}
+activate UserClient
+activate Server
+
+note right of Server : JWT Middleware: Extract User ID
+
+Server -[#CC3300]> UserCtrl : Parse Request
+activate UserCtrl
+
+UserCtrl -> UserCtrl : Validate Request Body
+UserCtrl -[#CC3300]> UserService : RequestRefund
+activate UserService
+
+UserService -[#CC3300]> SubRepo : Validate: Subscription ownership
+activate SubRepo
+SubRepo -[#CC3300]> DB : SELECT * FROM subscriptions WHERE id=? AND user_id=?
+activate DB
+DB -[#006600]-> SubRepo : Subscription Data
+deactivate DB
+SubRepo -[#006600]-> UserService : Subscription Entity
+deactivate SubRepo
+
+UserService -> UserService : Validate: Status=active, PaymentStatus=paid
+UserService -[#CC3300]> RefundRepo : Check: No existing refund request
+activate RefundRepo
+RefundRepo -[#CC3300]> DB : SELECT * FROM refunds WHERE subscription_id=? AND status IN ('pending','approved')
+activate DB
+DB -[#006600]-> RefundRepo : Existing Refund or Null
+deactivate DB
+RefundRepo -[#006600]-> UserService : Refund Check Result
+deactivate RefundRepo
+
+UserService -[#CC3300]> PlanRepo : Get: Plan price for refund amount
+activate PlanRepo
+PlanRepo -[#CC3300]> DB : SELECT price FROM plans WHERE id=(SELECT plan_id FROM subscriptions WHERE id=?)
+activate DB
+DB -[#006600]-> PlanRepo : Plan Price
+deactivate DB
+PlanRepo -[#006600]-> UserService : Price Data
+deactivate PlanRepo
+
+UserService -> Service : Begin Transaction
+UserService -[#CC3300]> RefundRepo : Create: Refund record (status=pending)
+activate RefundRepo
+RefundRepo -[#CC3300]> DB : INSERT INTO refunds (status='pending', amount, reason, subscription_id)
+activate DB
+DB -[#006600]-> RefundRepo : Refund ID
+deactivate DB
+RefundRepo -[#006600]-> UserService : Refund Created
+deactivate RefundRepo
+
+UserService -> Service : Commit Transaction
+UserService -[#006600]> UserCtrl : Pending confirmation
+deactivate UserService
+
+UserCtrl -> UserCtrl : Format Response
+UserCtrl -[#006600]> Server : HTTP Response: Pending confirmation
+deactivate UserCtrl
+
+Server -[#006600]> UserClient : 200 OK\n{success: true, data: {\n  refund_id: "...",\n  status: "pending",\n  message: "Refund request submitted for admin review"\n}}
+deactivate Server
+deactivate UserClient
+
+== ADMIN GET REFUNDS LIST ==
+
+AdminClient -[#CC3300]> Server : HTTP GET /api/admin/refunds?status=pending&page=1
+activate AdminClient
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> AdminCtrl : Parse Query Params
+activate AdminCtrl
+
+AdminCtrl -> AdminCtrl : Extract filters & pagination
+AdminCtrl -[#CC3300]> AdminService : GetRefunds
+activate AdminService
+
+AdminService -[#CC3300]> RefundRepo : FindAllWithDetails
+activate RefundRepo
+RefundRepo -[#CC3300]> DB : SELECT r.*, u.email, s.id as subscription_id, p.name as plan_name\nFROM refunds r\nJOIN subscriptions s ON r.subscription_id = s.id\nJOIN users u ON s.user_id = u.id\nJOIN plans p ON s.plan_id = p.id\nWHERE r.status = ?\nORDER BY r.created_at DESC\nLIMIT ? OFFSET ?
+activate DB
+DB -[#006600]-> RefundRepo : Refunds with Details
+deactivate DB
+RefundRepo -[#006600]-> AdminService : Refund Entities with Relations
+deactivate RefundRepo
+
+AdminService -> AdminService : Map: Entity -> DTO
+AdminService -> AdminService : Build Paginated Response
+AdminService -[#006600]> AdminCtrl : Paginated refund list
+deactivate AdminService
+
+AdminCtrl -> AdminCtrl : Format Response
+AdminCtrl -[#006600]> Server : HTTP Response: Paginated refund list
+deactivate AdminCtrl
+
+Server -[#006600]> AdminClient : 200 OK\n{success: true, data: {\n  refunds: [{\n    id: "...",\n    user_email: "...",\n    plan_name: "...",\n    amount: 9.99,\n    status: "pending",\n    reason: "...",\n    created_at: "..."\n  }],\n  total: 25,\n  page: 1,\n  limit: 20\n}}
+deactivate Server
+deactivate AdminClient
+
+== ADMIN APPROVE REFUND ==
+
+AdminClient -[#CC3300]> Server : HTTP POST /api/admin/refunds/:id/approve
+activate AdminClient
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> AdminCtrl : Parse Refund ID
+activate AdminCtrl
+
+AdminCtrl -> AdminCtrl : Extract Refund ID
+AdminCtrl -[#CC3300]> AdminService : ApproveRefund
+activate AdminService
+
+AdminService -> AdminService : Transaction Begin
+AdminService -[#CC3300]> RefundRepo : Update: Refund status  approved
+activate RefundRepo
+RefundRepo -[#CC3300]> DB : UPDATE refunds SET status='approved', approved_at=NOW(), approved_by=?\nWHERE id=?
+activate DB
+DB -[#006600]-> RefundRepo : Refund Updated
+deactivate DB
+RefundRepo -[#006600]-> AdminService : Refund Approved
+deactivate RefundRepo
+
+AdminService -[#CC3300]> SubRepo : Update: Subscription status  canceled
+activate SubRepo
+SubRepo -[#CC3300]> DB : UPDATE subscriptions SET status='canceled', canceled_at=NOW()\nWHERE id=(SELECT subscription_id FROM refunds WHERE id=?)
+activate DB
+DB -[#006600]-> SubRepo : Subscription Canceled
+deactivate DB
+SubRepo -[#006600]-> AdminService : Subscription Updated
+deactivate SubRepo
+
+AdminService -[#CC3300]> SubRepo : Update: PaymentStatus  refunded
+activate SubRepo
+SubRepo -[#CC3300]> DB : UPDATE subscriptions SET payment_status='refunded'\nWHERE id=(SELECT subscription_id FROM refunds WHERE id=?)
+activate DB
+DB -[#006600]-> SubRepo : Payment Status Updated
+deactivate DB
+SubRepo -[#006600]-> AdminService : Payment Marked Refunded
+deactivate SubRepo
+
+AdminService -[#CC6600]> Logger : Audit trail\n{action: "approve_refund", admin_id, refund_id, amount, user_id}
+activate Logger
+Logger -> Logger : Write to Audit Log
+Logger -[#006600]-> AdminService : Log Recorded
+deactivate Logger
+
+AdminService -> AdminService : Transaction Commit
+AdminService -[#006600]> AdminCtrl : Approved confirmation
+deactivate AdminService
+
+AdminCtrl -> AdminCtrl : Format Response
+AdminCtrl -[#006600]> Server : HTTP Response: Approved confirmation
+deactivate AdminCtrl
+
+Server -[#006600]> AdminClient : 200 OK\n{success: true, data: {\n  refund_id: "...",\n  status: "approved",\n  message: "Refund approved and subscription canceled"\n}}
+deactivate Server
+deactivate AdminClient
+
+== ADMIN DIRECT REFUND ==
+
+AdminClient -[#CC3300]> Server : HTTP POST /api/admin/subscriptions/refund\n{subscription_id, reason}
+activate AdminClient
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> AdminCtrl : Parse Request
+activate AdminCtrl
+
+AdminCtrl -> AdminCtrl : Validate Request
+AdminCtrl -[#CC3300]> AdminService : RefundSubscription
+activate AdminService
+
+AdminService -> AdminService : Transaction Begin
+AdminService -[#CC3300]> SubRepo : Update: Subscription  canceled + refunded
+activate SubRepo
+SubRepo -[#CC3300]> DB : UPDATE subscriptions SET status='canceled', payment_status='refunded', refunded_at=NOW()\nWHERE id=?
+activate DB
+DB -[#006600]-> SubRepo : Subscription Updated
+deactivate DB
+SubRepo -[#006600]-> AdminService : Subscription Marked Refunded
+deactivate SubRepo
+
+AdminService -[#CC3300]> RefundRepo : Create: Refund record (status=processed)
+activate RefundRepo
+RefundRepo -[#CC3300]> DB : INSERT INTO refunds (status='processed', amount, reason, subscription_id, processed_by)
+activate DB
+DB -[#006600]-> RefundRepo : Refund ID
+deactivate DB
+RefundRepo -[#006600]-> AdminService : Direct Refund Created
+deactivate RefundRepo
+
+AdminService -[#CC6600]> Logger : Audit trail\n{action: "direct_refund", admin_id, subscription_id, amount, reason}
+activate Logger
+Logger -> Logger : Write to Audit Log
+Logger -[#006600]-> AdminService : Log Recorded
+deactivate Logger
+
+AdminService -> AdminService : Transaction Commit
+AdminService -[#006600]> AdminCtrl : Processed confirmation
+deactivate AdminService
+
+AdminCtrl -> AdminCtrl : Format Response
+AdminCtrl -[#006600]> Server : HTTP Response: Processed confirmation
+deactivate AdminCtrl
+
+Server -[#006600]> AdminClient : 200 OK\n{success: true, data: {\n  subscription_id: "...",\n  status: "refunded",\n  refund_id: "...",\n  message: "Subscription refunded directly by admin"\n}}
+deactivate Server
+deactivate AdminClient
+
+@enduml
+

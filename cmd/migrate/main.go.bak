@@ -1,0 +1,148 @@
+package main
+
+import (
+	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+
+	"ai-notetaking-be/internal/model"
+	"ai-notetaking-be/pkg/database"
+
+	"github.com/joho/godotenv"
+	"gorm.io/gorm"
+)
+
+func main() {
+	// 1. Load Environment Variables
+	if err := godotenv.Load(); err != nil {
+		log.Println("Info: No .env file found, using system env")
+	}
+
+	dsn := os.Getenv("DB_CONNECTION_STRING")
+	if dsn == "" {
+		log.Fatal("Error: DB_CONNECTION_STRING is not set")
+	}
+
+	db, err := database.NewGormDBFromDSN(dsn)
+	if err != nil {
+		log.Fatal("Error: Failed to connect to database:", err)
+	}
+
+	log.Println("Dropping problematic Materialized View: admin_payment_audit_view...")
+	if err := db.Exec("DROP MATERIALIZED VIEW IF EXISTS admin_payment_audit_view CASCADE;").Error; err != nil {
+		log.Printf("Warn: Failed to drop materialized view: %v", err)
+	}
+
+	log.Println("Step 0: Running SQL Migrations...")
+	// Execute standalone SQL migrations
+	migrationsDir := "migrations"
+	if err := executeSQLMigrations(db, migrationsDir); err != nil {
+		log.Printf("Warn: SQL migrations failed: %v", err)
+	}
+
+	log.Println("Step 1: Running AutoMigrate to ensure tables exist...")
+
+	// Daftar model yang akan dimigrasi
+	models := []interface{}{
+		&model.User{},
+		&model.PasswordResetToken{},
+		&model.UserProvider{},
+		&model.EmailVerificationToken{},
+		&model.UserRefreshToken{},
+		&model.Notebook{},
+		&model.Note{},
+		&model.NoteEmbedding{},
+		&model.ChatSession{},
+		&model.ChatMessage{},
+		&model.ChatMessageRaw{},
+		&model.SubscriptionPlan{},
+		&model.Feature{}, // NEW: Master feature catalog
+		&model.UserSubscription{},
+		&model.BillingAddress{},
+		&model.Refund{},
+	}
+
+	for _, m := range models {
+		if err := db.AutoMigrate(m); err != nil {
+			log.Printf("Error migrating %T: %v", m, err)
+		} else {
+			log.Printf("Success: Migrated %T", m)
+		}
+	}
+
+	log.Println("Step 2: Running Manual Schema Adjustments...")
+
+	// 3. Tambahkan kolom deleted_at secara manual
+	tables := []string{
+		"users", "notebooks", "notes", "note_embeddings",
+		"chat_sessions", "chat_messages", "chat_messages_raw", "refunds",
+	}
+
+	for _, table := range tables {
+		q := fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE NULL;", table)
+		if err := db.Exec(q).Error; err != nil {
+			log.Printf("Warn: Failed to add deleted_at to %s: %v", table, err)
+		}
+	}
+
+	// 4. Perbaikan Tipe Data Spesifik (Vector)
+	if db.Migrator().HasTable(&model.NoteEmbedding{}) {
+		qVec := "ALTER TABLE note_embeddings ALTER COLUMN embedding_value TYPE vector(768) USING embedding_value::vector(768);"
+		if err := db.Exec(qVec).Error; err != nil {
+			log.Printf("Warn: Failed to alter note_embeddings dimension: %v", err)
+		}
+	}
+
+	// 5. Drop legacy Foreign Key
+	if db.Migrator().HasTable("user_subscriptions") {
+		qFK := "ALTER TABLE user_subscriptions DROP CONSTRAINT IF EXISTS user_subscriptions_billing_address_id_fkey;"
+		if err := db.Exec(qFK).Error; err != nil {
+			log.Printf("Warn: Failed to drop legacy FK: %v", err)
+		}
+	}
+
+	log.Println("Migration process completed!")
+	log.Println("PENTING: Materialized View 'admin_payment_audit_view' telah dihapus.")
+	log.Println("Silakan buat kembali view tersebut menggunakan backup definition yang sudah kamu simpan.")
+}
+
+// executeSQLMigrations runs all .sql files in the migrations directory
+func executeSQLMigrations(db *gorm.DB, migrationsDir string) error {
+	// Check if migrations directory exists
+	if _, err := os.Stat(migrationsDir); os.IsNotExist(err) {
+		log.Printf("Info: Migrations directory '%s' does not exist, skipping SQL migrations", migrationsDir)
+		return nil
+	}
+
+	// Read all .sql files from migrations directory
+	files, err := filepath.Glob(filepath.Join(migrationsDir, "*.sql"))
+	if err != nil {
+		return fmt.Errorf("failed to read migrations directory: %w", err)
+	}
+
+	if len(files) == 0 {
+		log.Println("Info: No SQL migration files found")
+		return nil
+	}
+
+	// Execute each migration file
+	for _, file := range files {
+		log.Printf("Executing migration: %s", filepath.Base(file))
+
+		// Read the SQL file
+		sqlBytes, err := os.ReadFile(file)
+		if err != nil {
+			return fmt.Errorf("failed to read migration file %s: %w", file, err)
+		}
+
+		// Execute the SQL
+		if err := db.Exec(string(sqlBytes)).Error; err != nil {
+			return fmt.Errorf("failed to execute migration %s: %w", filepath.Base(file), err)
+		}
+
+		log.Printf("✓ Successfully executed migration: %s", filepath.Base(file))
+	}
+
+	return nil
+}

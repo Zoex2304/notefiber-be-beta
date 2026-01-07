@@ -1,0 +1,11 @@
+cmd/rest/main.go
+internal/bootstrap/container.go
+internal/server/server.go
+internal/controller/user_controller.go
+internal/dto/user_dto.go
+internal/service/user_service.go
+internal/repository/implementation/user_repository_impl.go
+internal/controller/payment_controller.go
+internal/service/payment_service.go
+internal/repository/implementation/subscription_repository_impl.go
+internal/repository/unitofwork/unit_of_work_impl.go

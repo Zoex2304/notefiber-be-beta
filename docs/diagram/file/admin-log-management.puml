@@ -1,0 +1,169 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **Logging System Flow**\nCentralized Logging, File Management & Admin Log Access
+header Logging System Sequence
+footer Page 1 of 1
+
+actor "Service" as Service
+actor "Admin Client" as Client
+boundary "Server" as Server
+control "Logger" as Logger
+control "Zap Logger" as Zap
+control "Lumberjack" as FileRotator
+control "Admin Controller" as Controller
+control "Admin Service" as AdminService
+database "Log Files" as LogFiles
+
+autonumber "<b>[000]"
+
+== LOG WRITING (From Services) ==
+
+note over Service, FileRotator : Services: AdminService, AuthService, PaymentService, etc.
+
+Service -> Logger : Logger.Info("User login", fields...)
+activate Service
+activate Logger
+
+Logger -> Zap : Zap Logger: Format as JSON
+activate Zap
+Zap -> Zap : Format: {\n  "timestamp": "...",\n  "level": "info",\n  "message": "User login",\n  "service": "auth",\n  "user_id": "...",\n  "ip": "...",\n  "request_id": "...",\n  "duration_ms": 123\n}
+Zap -[#006600]-> Logger : JSON Formatted Log
+deactivate Zap
+
+Logger -[#CC6600]> FileRotator : Lumberjack: Write to File
+activate FileRotator
+
+FileRotator -> LogFiles : Append to app.log
+activate LogFiles
+LogFiles -[#006600]-> FileRotator : Write Success
+deactivate LogFiles
+
+FileRotator -> FileRotator : Check Auto-Rotation: Size/Age/Backups
+alt File Size > 100MB
+    FileRotator -> FileRotator : Rotate: app.log  app-2025-12-23.log
+    FileRotator -> FileRotator : Compress Old Logs
+else File Age > 7 days
+    FileRotator -> FileRotator : Archive to backups/
+else Max Backups > 10
+    FileRotator -> FileRotator : Delete oldest backup
+end
+
+FileRotator -[#006600]-> Logger : Write Complete
+deactivate FileRotator
+
+Logger -[#006600]-> Service : Log Recorded
+deactivate Logger
+deactivate Service
+
+== GET LOGS (Admin Dashboard) ==
+
+Client -[#CC3300]> Server : HTTP GET /api/admin/logs\n?level=error&limit=50&offset=0
+activate Client
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> Controller : Parse Query Params
+activate Controller
+
+Controller -> Controller : Extract level, limit, offset
+Controller -[#CC3300]> AdminService : GetSystemLogs
+activate AdminService
+
+AdminService -[#CC6600]> Logger : Logger.GetLogs(level, limit, offset)
+activate Logger
+
+Logger -[#CC6600]> FileRotator : Read Log File
+activate FileRotator
+FileRotator -> LogFiles : Open app.log
+activate LogFiles
+LogFiles -[#006600]-> FileRotator : Log Content
+deactivate LogFiles
+FileRotator -[#006600]-> Logger : Raw Log Lines
+deactivate FileRotator
+
+Logger -> Logger : Parse JSON Lines
+Logger -> Logger : Filter by Level
+Logger -> Logger : Generate MD5 ID for each entry
+Logger -> Logger : Reverse (Newest First)
+Logger -> Logger : Paginate (limit, offset)
+Logger -[#006600]-> AdminService : Log Entries with IDs
+deactivate Logger
+
+AdminService -> AdminService : Format Log Entries
+AdminService -[#006600]> Controller : Log Entries
+deactivate AdminService
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Log Entries
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{\n  success: true,\n  data: {\n    logs: [{\n      id: "md5hash",\n      timestamp: "...",\n      level: "error",\n      message: "...",\n      service: "...",\n      ...\n    }],\n    total: 1000,\n    page: 1,\n    limit: 50\n  }\n}
+deactivate Server
+deactivate Client
+
+== GET LOG DETAIL (Admin Dashboard) ==
+
+Client -[#CC3300]> Server : HTTP GET /api/admin/logs/:id
+activate Client
+activate Server
+
+note right of Server : Admin Middleware: Validate JWT + Admin Role
+
+Server -[#CC3300]> Controller : Parse Log ID
+activate Controller
+
+Controller -> Controller : Extract MD5 ID from URL
+Controller -[#CC3300]> AdminService : GetLogDetail
+activate AdminService
+
+AdminService -[#CC6600]> Logger : Logger.GetLogById(id)
+activate Logger
+
+Logger -[#CC6600]> FileRotator : Scan Logs
+activate FileRotator
+FileRotator -> LogFiles : Read Log Files\n(current + rotated)
+activate LogFiles
+LogFiles -[#006600]-> FileRotator : All Log Content
+deactivate LogFiles
+FileRotator -[#006600]-> Logger : All Log Entries
+deactivate FileRotator
+
+Logger -> Logger : Iterate through entries
+Logger -> Logger : Match MD5 ID
+alt Entry Found
+    Logger -> Logger : Return Log Details
+    Logger -[#006600]> AdminService : Log Details
+else Entry Not Found
+    Logger -> Logger : Return null (404)
+    Logger -[#990000]> AdminService : Not Found
+end
+deactivate Logger
+
+alt Log Found
+    AdminService -> AdminService : Format Log Details
+    AdminService -[#006600]> Controller : Log Details
+else Log Not Found
+    AdminService -> AdminService : Throw 404 Error
+end
+deactivate AdminService
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Log Details
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{\n  success: true,\n  data: {\n    log: {\n      id: "md5hash",\n      timestamp: "...",\n      level: "error",\n      message: "...",\n      service: "payment",\n      stack_trace: "...",\n      request_body: {...},\n      response_body: {...},\n      metadata: {...}\n    }\n  }\n}
+deactivate Server
+deactivate Client
+
+@enduml
+

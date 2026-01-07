@@ -1,0 +1,3 @@
+.env
+logs/llm_rag.log
+logs/

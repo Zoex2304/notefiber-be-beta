@@ -1,0 +1,12 @@
+internal/controller/note_controller.go
+internal/dto/note_dto.go
+internal/service/note_service.go
+internal/repository/contract/note_repository.go
+internal/repository/implementation/note_repository_impl.go
+internal/mapper/note_mapper.go
+internal/entity/note_entity.go
+internal/model/note_model.go
+migrations/20251223000000_init_schema.up.sql
+internal/repository/specification
+internal/repository/unitofwork
+internal/bootstrap/container.go

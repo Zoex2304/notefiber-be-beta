@@ -1,0 +1,786 @@
+# Dokumentasi: Backend Role-Based Access Control (RBAC)
+
+**Tanggal Dokumentasi:** 27 Desember 2024  
+**Fokus Domain:** Backend (User Role & Access Control)  
+**Sumber Kebenaran:** Laporan Implementasi Fitur RBAC
+
+---
+
+## A. Pengantar Fitur RBAC Backend
+
+Fitur ini menyediakan mekanisme kontrol akses berbasis peran (Role-Based Access Control) untuk memisahkan hak akses antara pengguna biasa dan administrator. Sistem mengimplementasikan dua jenis role yaitu User dan Admin dengan hak akses yang berbeda terhadap resource dan endpoint API.
+
+Secara operasional, setiap pengguna yang terdaftar memiliki atribut role yang menentukan endpoint mana yang dapat diakses. Role disimpan sebagai field dalam entity User dan di-embed dalam JWT claims saat proses autentikasi. Middleware pada setiap route group memvalidasi role dari token untuk memastikan hanya pengguna dengan role yang sesuai yang dapat mengakses endpoint tersebut.
+
+Untuk memitigasi risiko akses tidak sah dan menjaga keamanan sistem, implementasi RBAC menggunakan pendekatan defense-in-depth dengan multiple layer validasi. Layer pertama adalah JWT middleware yang memvalidasi keabsahan token. Layer kedua adalah role middleware yang memeriksa role dari claims. Layer ketiga adalah service-level validation yang memastikan resource ownership.
+
+---
+
+## B. Alur Data End-to-End
+
+### B.1 Role Assignment pada Registrasi
+
+Alur dimulai ketika user baru mendaftar. Sistem secara otomatis mengassign role default yaitu "user" kepada setiap pengguna baru. Role admin tidak dapat diperoleh melalui registrasi publik dan harus diassign secara manual melalui database atau endpoint admin khusus.
+
+```
+User Registration Flow:
+    -> POST /api/auth/register
+    -> AuthService.Register()
+    -> Create User Entity dengan Role = "user"
+    -> Persist ke Database
+    -> Response dengan user info (tanpa role untuk keamanan)
+
+Admin Creation Flow:
+    -> Manual Database Insert atau
+    -> PUT /api/admin/users/:id (oleh Admin lain)
+    -> AdminService.UpdateUser()
+    -> Update User Entity dengan Role = "admin"
+    -> Persist ke Database
+```
+
+*Snippet 1: Alur assignment role pada user baru dan pembuatan admin.*
+
+Role default "user" ditetapkan saat pembuatan entity User dalam AuthService. Tidak ada mekanisme untuk user biasa mengubah role mereka sendiri karena field role tidak termasuk dalam request payload registrasi atau update profile.
+
+### B.2 Role dalam JWT Token
+
+Setelah login berhasil, sistem meng-embed role dalam JWT claims. Role ini akan digunakan oleh middleware untuk validasi akses pada setiap request berikutnya.
+
+```
+Login Flow:
+    -> POST /api/auth/login (atau /api/admin/login)
+    -> AuthService.Login() / LoginAdmin()
+    -> Validate Credentials
+    -> Generate JWT dengan claims:
+        {
+            "user_id": "uuid",
+            "role": "user" atau "admin",
+            "exp": timestamp
+        }
+    -> Response dengan access_token
+```
+
+*Snippet 2: Role di-embed dalam JWT claims saat login.*
+
+JWT claims berisi tiga informasi penting: user_id untuk identifikasi pengguna, role untuk kontrol akses, dan exp untuk masa berlaku token. Role diambil dari field Role dalam entity User yang tersimpan di database.
+
+### B.3 Middleware Validation Flow
+
+Setiap request ke protected endpoint melewati middleware yang memvalidasi JWT dan memeriksa role dari claims.
+
+```
+Request ke Protected Endpoint:
+    -> HTTP Request dengan Authorization: Bearer <token>
+    -> Middleware Layer 1: JWT Validation
+        -> Parse Token
+        -> Validate Signature
+        -> Check Expiry
+        -> Extract Claims
+    -> Middleware Layer 2: Role Check (untuk admin routes)
+        -> Get "role" dari claims
+        -> Compare dengan required role
+        -> 403 jika role tidak sesuai
+    -> Handler (jika akses diizinkan)
+    -> Response
+```
+
+*Snippet 3: Alur validasi middleware untuk protected endpoints.*
+
+Middleware dijalankan secara berurutan. Jika validasi JWT gagal, request langsung ditolak dengan status 401 Unauthorized. Jika role tidak sesuai, request ditolak dengan status 403 Forbidden. Hanya request yang lolos semua validasi yang diteruskan ke handler.
+
+### B.4 Response Error Berdasarkan Role
+
+```json
+// 401 Unauthorized - Token tidak valid atau expired
+{
+    "success": false,
+    "code": 401,
+    "message": "Invalid or expired token"
+}
+
+// 403 Forbidden - Role tidak memiliki akses
+{
+    "success": false,
+    "code": 403,
+    "message": "Access denied: Admins only"
+}
+```
+
+*Snippet 4: Struktur JSON response untuk akses yang ditolak.*
+
+Response 401 menunjukkan masalah autentikasi dimana token tidak valid, expired, atau tidak ada. Response 403 menunjukkan masalah autorisasi dimana token valid tetapi role pengguna tidak memiliki hak akses ke resource yang diminta.
+
+---
+
+## C. Arsitektur Backend - 12 Komponen
+
+### C.1 Domain Entity - Role & Status Enum
+
+Komponen ini mendefinisikan tipe data custom untuk Role dan Status pengguna. Enum memberikan type safety dan membatasi nilai yang valid untuk field role dan status.
+
+Lokasi file adalah internal/entity/user_entity.go yang berisi definisi tipe UserRole dan UserStatus sebagai alias dari string dengan constant values yang terdefinisi.
+
+```go
+type UserRole string
+type UserStatus string
+
+const (
+	UserRoleUser  UserRole = "user"
+	UserRoleAdmin UserRole = "admin"
+
+	UserStatusPending UserStatus = "pending"
+	UserStatusActive  UserStatus = "active"
+	UserStatusBlocked UserStatus = "blocked"
+)
+```
+
+*Snippet 5: Definisi enum untuk Role dan Status pengguna.*
+
+UserRole memiliki dua nilai valid yaitu "user" untuk pengguna biasa dan "admin" untuk administrator. Setiap nilai didefinisikan sebagai constant sehingga dapat digunakan di seluruh codebase dengan type safety.
+
+UserStatus memiliki tiga nilai valid yaitu "pending" untuk akun yang belum diverifikasi, "active" untuk akun yang aktif dan dapat digunakan, dan "blocked" untuk akun yang diblokir oleh administrator.
+
+Status "blocked" dapat digunakan untuk menonaktifkan akses pengguna tanpa menghapus data mereka dari sistem. Pengguna dengan status blocked akan gagal login meskipun kredensial mereka valid.
+
+### C.2 User Entity Structure
+
+Entity User menyimpan informasi lengkap pengguna termasuk role dan status. Entity ini adalah representasi domain dari konsep User dalam sistem.
+
+Lokasi file adalah internal/entity/user_entity.go yang berisi struct User dengan semua field yang diperlukan untuk manajemen pengguna.
+
+```go
+type User struct {
+	Id                    uuid.UUID
+	Email                 string
+	PasswordHash          *string
+	FullName              string
+	Role                  UserRole    // Determines access level
+	Status                UserStatus  // Determines account state
+	EmailVerified         bool
+	EmailVerifiedAt       *time.Time
+	AvatarURL             *string
+	CreatedAt             time.Time
+	UpdatedAt             time.Time
+	AiDailyUsage          int
+	AiDailyUsageLastReset time.Time
+}
+```
+
+*Snippet 6: Struktur entity User dengan field Role dan Status.*
+
+Field Role bertipe UserRole yang merupakan enum custom. Ini memastikan bahwa hanya nilai "user" atau "admin" yang dapat di-assign ke field ini. Compiler akan menolak nilai string arbitrary yang tidak termasuk dalam enum.
+
+Field Status bertipe UserStatus yang menentukan kondisi akun. Kombinasi Role dan Status menentukan akses pengguna secara lengkap. Contohnya, admin dengan status blocked tetap tidak dapat login.
+
+### C.3 Database Model - Role Storage
+
+Model User mendefinisikan bagaimana data role disimpan di tabel database. Role disimpan sebagai varchar dengan default value "user".
+
+Lokasi file adalah internal/model/user_model.go yang berisi struct dengan tag GORM untuk mapping ke tabel users.
+
+```go
+type User struct {
+	Id            uuid.UUID      `gorm:"type:uuid;primaryKey;default:gen_random_uuid()"`
+	Email         string         `gorm:"type:varchar(255);uniqueIndex;not null"`
+	PasswordHash  *string        `gorm:"type:varchar(255)"`
+	FullName      string         `gorm:"type:varchar(255);not null"`
+	Role          string         `gorm:"type:varchar(50);not null;default:'user'"`
+	Status        string         `gorm:"type:varchar(50);not null;default:'pending'"`
+	EmailVerified bool           `gorm:"default:false"`
+	// ...
+}
+```
+
+*Snippet 7: Model database dengan default value untuk Role dan Status.*
+
+Field Role bertipe string di model karena database tidak mengenal konsep enum Go. Default value 'user' memastikan setiap record baru yang tidak secara eksplisit mengset role akan memiliki role user.
+
+Tag GORM "not null" memastikan kolom ini tidak boleh kosong. Constraint ini diterapkan di level database sebagai layer keamanan tambahan.
+
+### C.4 Mapper - Role Type Conversion
+
+Mapper menangani konversi tipe antara enum di entity dan string di model. Konversi ini memastikan type safety di layer domain meskipun database menyimpan sebagai string.
+
+Lokasi file adalah internal/mapper/user_mapper.go yang berisi method untuk transformasi bidirectional.
+
+```go
+func (m *UserMapper) ToEntity(u *model.User) *entity.User {
+	if u == nil { return nil }
+	return &entity.User{
+		Id:            u.Id,
+		Email:         u.Email,
+		PasswordHash:  u.PasswordHash,
+		FullName:      u.FullName,
+		Role:          entity.UserRole(u.Role),   // string -> enum
+		Status:        entity.UserStatus(u.Status), // string -> enum
+		EmailVerified: u.EmailVerified,
+		// ...
+	}
+}
+
+func (m *UserMapper) ToModel(u *entity.User) *model.User {
+	if u == nil { return nil }
+	return &model.User{
+		Id:            u.Id,
+		Email:         u.Email,
+		PasswordHash:  u.PasswordHash,
+		FullName:      u.FullName,
+		Role:          string(u.Role),   // enum -> string
+		Status:        string(u.Status), // enum -> string
+		// ...
+	}
+}
+```
+
+*Snippet 8: Konversi tipe Role dan Status antara entity dan model.*
+
+Method ToEntity mengkonversi string dari database menjadi enum UserRole dan UserStatus. Casting langsung seperti entity.UserRole(u.Role) valid karena underlying type enum adalah string.
+
+Method ToModel melakukan sebaliknya dengan casting enum ke string menggunakan string(u.Role). Ini memastikan data yang ditulis ke database selalu berupa string yang valid.
+
+### C.5 Auth Service - Role Assignment
+
+Service menangani assignment role saat pembuatan user baru. Role default "user" di-hardcode dalam service untuk memastikan konsistensi.
+
+Lokasi file adalah internal/service/auth_service.go yang mengandung logika registrasi.
+
+```go
+func (s *authService) Register(ctx context.Context, req *dto.RegisterRequest) (*dto.RegisterResponse, error) {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+	
+	// Check existing user...
+	// Hash password...
+	
+	// Create User Entity with default Role
+	user := &entity.User{
+		Id:            uuid.New(),
+		Email:         req.Email,
+		FullName:      req.FullName,
+		PasswordHash:  &hashStr,
+		Role:          entity.UserRoleUser,     // Always "user" for registration
+		Status:        entity.UserStatusPending,
+		EmailVerified: false,
+	}
+	
+	// Persist and send verification email...
+}
+```
+
+*Snippet 9: Assignment role default saat registrasi user baru.*
+
+Entity.UserRoleUser adalah constant dengan nilai "user". Dengan hardcoding role di service, tidak ada cara bagi client untuk menentukan role mereka sendiri melalui request payload. Ini adalah design decision penting untuk keamanan.
+
+Request RegisterRequest tidak memiliki field Role. Meskipun client mengirim field "role" dalam JSON body, field tersebut akan diabaikan karena tidak ada mapping di struct DTO.
+
+### C.6 Auth Service - Admin Login dengan Role Check
+
+Service menyediakan endpoint login khusus untuk admin dengan validasi role yang ketat. Validasi ini memastikan hanya user dengan role admin yang dapat mengakses admin panel.
+
+Lokasi file adalah internal/service/auth_service.go yang mengandung method LoginAdmin.
+
+```go
+func (s *authService) LoginAdmin(ctx context.Context, req *dto.LoginRequest, ipAddress, userAgent string) (*dto.LoginResponse, error) {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+
+	// 1. Check if user exists
+	user, err := uow.UserRepository().FindOne(ctx, specification.ByEmail{Email: req.Email})
+	if err != nil || user == nil {
+		return nil, errors.New("invalid credentials")
+	}
+
+	// 2. STRICT ROLE CHECK - Utama untuk keamanan
+	if user.Role != entity.UserRoleAdmin {
+		return nil, errors.New("access denied: admins only")
+	}
+
+	// 3. Password Check
+	if user.PasswordHash == nil {
+		return nil, errors.New("user registered via OAuth")
+	}
+	err = bcrypt.CompareHashAndPassword([]byte(*user.PasswordHash), []byte(req.Password))
+	if err != nil {
+		return nil, errors.New("invalid credentials")
+	}
+
+	// 4. Status Check
+	if user.Status == entity.UserStatusBlocked {
+		return nil, errors.New("admin account is blocked")
+	}
+
+	// 5. Generate Token with Role claim
+	claims := jwt.MapClaims{
+		"user_id": user.Id.String(),
+		"role":    user.Role,   // Role embedded in token
+		"exp":     time.Now().Add(time.Hour * 24).Unix(),
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	// ...
+}
+```
+
+*Snippet 10: Validasi role ketat pada admin login.*
+
+Langkah pertama mencari user berdasarkan email. Error message yang sama "invalid credentials" digunakan untuk user tidak ditemukan dan password salah untuk mencegah user enumeration attack.
+
+Langkah kedua adalah role check yang paling krusial. Jika user ditemukan tetapi role bukan admin, akses langsung ditolak dengan message eksplisit "access denied: admins only". Ini mencegah user biasa menggunakan endpoint admin login.
+
+Langkah kelima menggenerate JWT dengan role di-embed dalam claims. Claim "role" akan digunakan oleh middleware untuk validasi akses di setiap request berikutnya.
+
+### C.7 JWT Middleware - User Authentication
+
+Middleware ini memvalidasi token JWT untuk semua protected endpoints. Middleware ini adalah layer pertama yang dijalankan sebelum request mencapai handler.
+
+Lokasi file adalah internal/pkg/serverutils/jwt_middleware.go yang berisi fungsi middleware standar.
+
+```go
+func JwtMiddleware(ctx *fiber.Ctx) error {
+	authHeader := ctx.Get("Authorization")
+	
+	// Check Bearer prefix
+	if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"message": "Missing token",
+		})
+	}
+	tokenStr := authHeader[7:]
+
+	// Parse and validate token
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		return []byte(os.Getenv("JWT_SECRET")), nil
+	})
+
+	if err != nil || !token.Valid {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"message": "Invalid token",
+		})
+	}
+
+	// Extract claims
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(fiber.Map{
+			"message": "Invalid claims",
+		})
+	}
+
+	// Store user_id in context for handlers
+	ctx.Locals("user_id", claims["user_id"])
+	return ctx.Next()
+}
+```
+
+*Snippet 11: JWT middleware untuk validasi token.*
+
+Middleware pertama-tama memeriksa keberadaan header Authorization dengan prefix "Bearer ". Jika tidak ada, request langsung ditolak dengan status 401 dan message "Missing token".
+
+Token kemudian di-parse dan divalidasi menggunakan JWT_SECRET dari environment variable. Validasi mencakup signature verification dan expiry check. Token yang invalid atau expired akan ditolak.
+
+Claims yang berhasil di-extract disimpan dalam context menggunakan ctx.Locals. Ini memungkinkan handler selanjutnya mengakses user_id tanpa perlu mem-parse token lagi.
+
+Middleware ini tidak memeriksa role. Tugas role checking diserahkan ke middleware khusus admin atau validasi di level service.
+
+### C.8 Admin Middleware - Role Authorization
+
+Middleware ini memvalidasi bahwa user memiliki role admin. Middleware ini dijalankan setelah JWT middleware khusus untuk route group admin.
+
+Lokasi file adalah internal/controller/admin_controller.go yang berisi method adminMiddleware.
+
+```go
+func (c *adminController) adminMiddleware(ctx *fiber.Ctx) error {
+	authHeader := ctx.Get("Authorization")
+
+	// Check Authorization header
+	if len(authHeader) < 7 || authHeader[:7] != "Bearer " {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(
+			serverutils.ErrorResponse(401, "Missing or invalid authorization header"))
+	}
+	tokenStr := authHeader[7:]
+
+	// Get JWT secret
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "default_secret"
+	}
+
+	// Parse with Claims
+	token, err := jwt.Parse(tokenStr, func(t *jwt.Token) (interface{}, error) {
+		return []byte(secret), nil
+	})
+
+	if err != nil || token == nil || !token.Valid {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(
+			serverutils.ErrorResponse(401, "Invalid or expired token"))
+	}
+
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return ctx.Status(fiber.StatusUnauthorized).JSON(
+			serverutils.ErrorResponse(401, "Invalid token claims"))
+	}
+
+	// CHECK ADMIN ROLE - Key authorization logic
+	role, ok := claims["role"].(string)
+	if !ok {
+		return ctx.Status(fiber.StatusForbidden).JSON(
+			serverutils.ErrorResponse(403, "Access denied: Role missing"))
+	}
+	if role != "admin" {
+		return ctx.Status(fiber.StatusForbidden).JSON(
+			serverutils.ErrorResponse(403, "Access denied: Admins only"))
+	}
+
+	// Store user_id in context for handlers
+	if userId, exists := claims["user_id"]; exists {
+		ctx.Locals("user_id", userId)
+	}
+
+	return ctx.Next()
+}
+```
+
+*Snippet 12: Admin middleware dengan validasi role ketat.*
+
+Middleware melakukan full JWT validation terlebih dahulu, kemudian memeriksa claim "role". Jika claim role tidak ada, request ditolak dengan 403 dan message "Role missing". Ini menangani kasus token lama yang di-generate sebelum role claim ditambahkan.
+
+Perbandingan role != "admin" adalah core logic untuk RBAC. Nilai "admin" di-hardcode sebagai string karena claim JWT adalah interface{} yang di-cast ke string.
+
+Status code 403 Forbidden digunakan untuk role-based denial, berbeda dengan 401 Unauthorized yang digunakan untuk authentication failure. Ini mengikuti HTTP semantic yang benar.
+
+### C.9 Route Registration - Endpoint Protection
+
+Controller mendaftarkan routes dengan middleware yang sesuai. Routes di bawah admin group dilindungi oleh adminMiddleware.
+
+Lokasi file adalah internal/controller/admin_controller.go yang berisi method RegisterRoutes.
+
+```go
+func (c *adminController) RegisterRoutes(r fiber.Router) {
+	h := r.Group("/admin")
+
+	// Public Admin Route (Login) - Tidak perlu auth
+	h.Post("/login", c.Login)
+
+	// Protected Routes - Semua route di bawah ini perlu admin role
+	h.Use(c.adminMiddleware)
+
+	// Dashboard
+	h.Get("/dashboard", c.GetDashboardStats)
+	h.Get("/growth", c.GetUserGrowth)
+
+	// Users Management
+	h.Get("/users", c.GetAllUsers)
+	h.Get("/users/:id", c.GetUserDetail)
+	h.Put("/users/:id/status", c.UpdateUserStatus)
+	h.Put("/users/:id", c.UpdateUser)
+	h.Delete("/users/:id", c.DeleteUser)
+
+	// Transactions
+	h.Get("/transactions", c.GetTransactions)
+
+	// Logs
+	h.Get("/logs", c.GetLogs)
+	h.Get("/logs/:id", c.GetLogDetail)
+
+	// Subscription Actions
+	h.Post("/subscriptions/upgrade", c.UpgradeSubscription)
+	h.Post("/subscriptions/refund", c.RefundSubscription)
+
+	// Plan Management
+	h.Post("/plans", c.CreatePlan)
+	h.Get("/plans", c.GetAllPlans)
+	h.Put("/plans/:id", c.UpdatePlan)
+	h.Delete("/plans/:id", c.DeletePlan)
+
+	// Plan Feature Management
+	h.Get("/plans/:id/features", c.GetPlanFeatures)
+	h.Post("/plans/:id/features", c.CreatePlanFeature)
+	h.Delete("/plans/:id/features/:featureId", c.DeletePlanFeature)
+
+	// Feature Catalog
+	h.Get("/features", c.GetAllFeatures)
+	h.Post("/features", c.CreateFeature)
+	h.Put("/features/:id", c.UpdateFeature)
+	h.Delete("/features/:id", c.DeleteFeature)
+
+	// Refund Management
+	h.Get("/refunds", c.GetRefunds)
+	h.Post("/refunds/:id/approve", c.ApproveRefund)
+
+	// Token Usage
+	h.Get("/token-usage", c.GetTokenUsage)
+}
+```
+
+*Snippet 13: Route registration dengan middleware protection.*
+
+Route /admin/login didaftarkan sebelum h.Use(c.adminMiddleware) sehingga tidak dilindungi oleh middleware. Ini penting karena admin perlu login untuk mendapatkan token terlebih dahulu.
+
+Statement h.Use(c.adminMiddleware) mendaftarkan middleware untuk semua route yang didefinisikan setelahnya. Ini adalah cara Fiber untuk menerapkan middleware ke route group.
+
+Semua route di bawah h.Use akan melewati adminMiddleware yang memvalidasi JWT dan memeriksa role admin. Request dari user biasa akan ditolak dengan 403.
+
+### C.10 User Routes - Standard User Access
+
+Untuk perbandingan, routes user biasa dilindungi hanya dengan JWT middleware tanpa role check. Semua user yang ter-autentikasi dapat mengakses endpoint ini.
+
+Lokasi file adalah contoh dari internal/controller/note_controller.go atau user_controller.go.
+
+```go
+func (c *noteController) RegisterRoutes(r fiber.Router) {
+	h := r.Group("/notes")
+	h.Use(serverutils.JwtMiddleware)  // Hanya JWT, tanpa role check
+
+	h.Get("/", c.GetAllNotes)
+	h.Get("/:id", c.GetNote)
+	h.Post("/", c.CreateNote)
+	h.Put("/:id", c.UpdateNote)
+	h.Delete("/:id", c.DeleteNote)
+	h.Get("/search", c.SemanticSearch)
+}
+```
+
+*Snippet 14: Route user biasa dengan JWT middleware saja.*
+
+Routes user menggunakan serverutils.JwtMiddleware yang hanya memvalidasi token tanpa memeriksa role. Semua user ter-autentikasi, baik role user maupun admin, dapat mengakses endpoint ini.
+
+Admin secara teknis juga dapat mengakses endpoint user karena mereka memiliki token yang valid. Ini adalah design decision yang valid karena admin adalah superset dari user dalam hal akses.
+
+### C.11 Admin Service - Role Change
+
+Service menyediakan method untuk mengubah role user. Hanya admin yang dapat mengakses endpoint yang memanggil method ini.
+
+Lokasi file adalah internal/service/admin_service.go yang berisi method untuk manajemen user.
+
+```go
+func (s *adminService) UpdateUser(ctx context.Context, userId uuid.UUID, req dto.AdminUpdateUserRequest) (*dto.AdminUserResponse, error) {
+	uow := s.uowFactory.NewUnitOfWork(ctx)
+
+	user, err := uow.UserRepository().FindOne(ctx, specification.ByID{ID: userId})
+	if err != nil || user == nil {
+		return nil, errors.New("user not found")
+	}
+
+	// Update fields from request
+	if req.FullName != "" {
+		user.FullName = req.FullName
+	}
+	if req.Email != "" {
+		user.Email = req.Email
+	}
+	if req.Role != "" {
+		user.Role = entity.UserRole(req.Role)  // Role can be changed by admin
+	}
+	if req.Status != "" {
+		user.Status = entity.UserStatus(req.Status)
+	}
+
+	if err := uow.UserRepository().Update(ctx, user); err != nil {
+		return nil, err
+	}
+
+	// Log action for audit
+	s.logger.Info("ADMIN", "Updated User", map[string]interface{}{
+		"userId":  userId.String(),
+		"changes": req,
+	})
+
+	// Return updated user...
+}
+```
+
+*Snippet 15: Admin service untuk mengubah role user.*
+
+Field req.Role dapat berisi "user" atau "admin". Casting entity.UserRole(req.Role) mengkonversi string ke enum. Jika nilai tidak valid, Go tidak akan error tetapi nilai enum akan tidak standar.
+
+Untuk production, sebaiknya validasi nilai role sebelum casting dengan whitelist check seperti if req.Role == "user" || req.Role == "admin".
+
+Logging penting untuk audit trail. Setiap perubahan role dicatat dengan user_id admin yang melakukan perubahan dan detail perubahan.
+
+### C.12 DTO - Login Response dengan Role
+
+Response login menyertakan informasi role dalam data user. Frontend dapat menggunakan informasi ini untuk menentukan UI yang ditampilkan.
+
+Lokasi file adalah internal/dto/auth_payment_dto.go yang berisi definisi LoginResponse dan UserDTO.
+
+```go
+type LoginResponse struct {
+	AccessToken  string  `json:"access_token"`
+	RefreshToken string  `json:"refresh_token,omitempty"`
+	User         UserDTO `json:"user"`
+}
+
+type UserDTO struct {
+	Id       uuid.UUID `json:"id"`
+	Email    string    `json:"email"`
+	FullName string    `json:"full_name"`
+	Role     string    `json:"role"`  // Exposed to frontend
+}
+```
+
+*Snippet 16: DTO login response dengan role info.*
+
+Field Role dalam UserDTO memungkinkan frontend mengetahui role user setelah login. Frontend dapat menggunakan informasi ini untuk routing ke dashboard yang sesuai (admin dashboard vs user dashboard).
+
+Role di-expose dalam response karena ini bukan informasi sensitif dan diperlukan untuk UX. Namun, frontend tidak boleh mengandalkan role dari response untuk akses kontrol. Validasi akses harus selalu dilakukan di backend via middleware.
+
+---
+
+## D. Ringkasan Arsitektur
+
+### D.1 Tabel Komponen RBAC
+
+Berikut adalah ringkasan lengkap dari 12 komponen yang menyusun sistem RBAC backend beserta lokasi file dan tanggung jawab masing-masing.
+
+| No | Layer | File | Tanggung Jawab |
+|---|---|---|---|
+| 1 | Entity Enum | entity/user_entity.go | Definisi UserRole dan UserStatus enum |
+| 2 | Entity User | entity/user_entity.go | Struktur domain User dengan Role field |
+| 3 | Model | model/user_model.go | Database mapping dengan default role |
+| 4 | Mapper | mapper/user_mapper.go | Konversi enum ↔ string |
+| 5 | Auth Service | service/auth_service.go | Role assignment saat registrasi |
+| 6 | Auth Service | service/auth_service.go | Admin login dengan role validation |
+| 7 | JWT Middleware | pkg/serverutils/jwt_middleware.go | Token validation (tanpa role check) |
+| 8 | Admin Middleware | controller/admin_controller.go | Role check untuk admin routes |
+| 9 | Route Registration | controller/admin_controller.go | Endpoint protection dengan middleware |
+| 10 | User Routes | controller/*_controller.go | Standard user endpoint protection |
+| 11 | Admin Service | service/admin_service.go | Role change operations |
+| 12 | DTO | dto/auth_payment_dto.go | Role dalam login response |
+
+*Tabel 1: Ringkasan 12 komponen RBAC backend.*
+
+### D.2 Role Permission Matrix
+
+Berikut adalah matriks akses berdasarkan role untuk setiap kategori endpoint.
+
+| Endpoint Category | User Role | Admin Role |
+|---|---|---|
+| /api/auth/* (login, register) | ✅ Public | ✅ Public |
+| /api/admin/login | ❌ Ditolak (role check) | ✅ Diizinkan |
+| /api/admin/* (protected) | ❌ Ditolak (403) | ✅ Diizinkan |
+| /api/notes/* | ✅ Diizinkan | ✅ Diizinkan |
+| /api/notebooks/* | ✅ Diizinkan | ✅ Diizinkan |
+| /api/chatbot/* | ✅ Diizinkan (dengan limit) | ✅ Diizinkan |
+| /api/user/* | ✅ Diizinkan | ✅ Diizinkan |
+| /api/payment/* | ✅ Diizinkan | ✅ Diizinkan |
+| /api/plans | ✅ Public | ✅ Public |
+
+*Tabel 2: Matriks akses berdasarkan role.*
+
+### D.3 Security Layers
+
+```
+┌─────────────────────────────────────────┐
+│           Request dari Client           │
+└─────────────────┬───────────────────────┘
+                  ↓
+┌─────────────────────────────────────────┐
+│   Layer 1: JWT Middleware               │
+│   - Token presence check                │
+│   - Signature validation                │
+│   - Expiry check                        │
+│   - 401 jika gagal                      │
+└─────────────────┬───────────────────────┘
+                  ↓
+┌─────────────────────────────────────────┐
+│   Layer 2: Admin Middleware (if admin)  │
+│   - Role claim extraction               │
+│   - Role == "admin" check               │
+│   - 403 jika role tidak sesuai          │
+└─────────────────┬───────────────────────┘
+                  ↓
+┌─────────────────────────────────────────┐
+│   Layer 3: Service Validation           │
+│   - Resource ownership check            │
+│   - Business rules validation           │
+│   - Status check (not blocked)          │
+└─────────────────┬───────────────────────┘
+                  ↓
+┌─────────────────────────────────────────┐
+│           Handler Execution             │
+└─────────────────────────────────────────┘
+```
+
+*Snippet 17: Diagram layer keamanan RBAC.*
+
+---
+
+## E. Role Lifecycle
+
+### E.1 User Role Lifecycle
+
+User role lifecycle dimulai saat registrasi dengan role default "user" dan berakhir jika akun dihapus.
+
+```
+Registration
+    → Role = "user" (default)
+    → Status = "pending"
+
+Email Verification
+    → Role tidak berubah
+    → Status = "active"
+
+Normal Usage
+    → Role = "user"
+    → Status = "active"
+
+Promoted to Admin (by existing admin)
+    → Role = "admin"
+    → Status tidak berubah
+
+Demoted from Admin (by super admin or self)
+    → Role = "user"
+    → Status tidak berubah
+
+Blocked (by admin)
+    → Role tidak berubah
+    → Status = "blocked"
+    → Tidak dapat login
+```
+
+*Snippet 18: Lifecycle perubahan role user.*
+
+### E.2 Admin Creation
+
+Admin baru dapat dibuat melalui dua cara:
+
+Cara pertama adalah melalui database langsung. DBA atau DevOps dapat menjalankan query SQL untuk mengubah role user menjadi admin.
+
+```sql
+UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
+```
+
+*Snippet 19: Query SQL untuk membuat admin.*
+
+Cara kedua adalah melalui endpoint admin. Admin yang sudah ada dapat mengubah role user lain menjadi admin melalui endpoint PUT /api/admin/users/:id.
+
+```json
+PUT /api/admin/users/123e4567-e89b-12d3-a456-426614174000
+{
+    "role": "admin"
+}
+```
+
+*Snippet 20: Request untuk promote user menjadi admin.*
+
+---
+
+## F. Best Practices & Security
+
+### F.1 Principle of Least Privilege
+
+Setiap user diberikan role dengan hak akses minimum yang diperlukan untuk tugas mereka. User biasa tidak perlu akses ke admin endpoints, jadi mereka tidak diberi role admin.
+
+### F.2 Defense in Depth
+
+Multiple layer validasi diterapkan untuk memastikan keamanan bahkan jika satu layer berhasil dibypass. JWT middleware, role middleware, dan service validation bekerja bersama.
+
+### F.3 Audit Logging
+
+Setiap perubahan role dicatat dalam log untuk audit trail. Log mencakup siapa yang melakukan perubahan, kapan, dan apa yang diubah.
+
+### F.4 Token Expiry
+
+JWT memiliki masa berlaku terbatas (24 jam). Setelah token expired, user harus login ulang untuk mendapatkan token baru dengan claims yang ter-update.
+
+---
+
+*Dokumen ini mengacu pada implementasi aktual dalam codebase tanpa modifikasi.*

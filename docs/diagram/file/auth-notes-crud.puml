@@ -1,0 +1,250 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **CRUD Operations for Notes**\nComplete Note Management Flow
+header Note Operations Sequence
+footer Page 1 of 1
+
+actor "Client" as Client
+boundary "Server" as Server
+control "JWT Middleware" as JWTMiddleware
+control "Note Controller" as Controller
+control "Note Service" as Service
+control "Publisher Service" as Publisher
+entity "Note Repository" as Repository
+database "Database" as DB
+
+autonumber "<b>[000]"
+
+== CREATE NOTE ==
+
+Client -[#CC3300]> Server : HTTP POST /api/note/v1\n{title, content, notebook_id}
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID dari Token
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Parsing & Validasi Request Body
+activate Controller
+
+Controller -> Controller : Validate Input
+Controller -[#CC3300]> Service : Konstruksi Entity dengan User ID
+activate Service
+
+Service -> Service : Build Note Entity
+Service -[#CC3300]> Repository : Persistensi Note
+activate Repository
+
+Repository -[#CC3300]> DB : INSERT INTO notes
+activate DB
+DB -[#006600]-> Repository : Note ID
+deactivate DB
+
+Repository -[#006600]-> Service : Created Note Entity
+deactivate Repository
+
+Service -[#CC6600]> Publisher : Trigger Embedding Generation (Async)
+activate Publisher
+Publisher -[#006600]-> Service : Async Processing Started
+deactivate Publisher
+
+Service -[#006600]> Controller : Note ID + Details
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Note ID
+deactivate Controller
+
+Server -[#006600]> Client : 201 Created\n{success: true, data: {id: ...}}
+deactivate Server
+deactivate Client
+
+== READ NOTE ==
+
+Client -[#CC3300]> Server : HTTP GET /api/note/v1/:id
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Parsing ID dari URL Params
+activate Controller
+
+Controller -> Controller : Extract :id Parameter
+Controller -[#CC3300]> Service : Query dengan Ownership Check
+activate Service
+
+Service -> Service : Build Specification\n(by ID + by User ID)
+Service -[#CC3300]> Repository : FindOne dengan Specifications
+activate Repository
+
+Repository -[#CC3300]> DB : SELECT * FROM notes\nWHERE id=? AND user_id=?
+activate DB
+DB -[#006600]-> Repository : Note Data
+deactivate DB
+
+alt Note Not Found
+    Repository -[#990000]-> Service : null (404)
+    deactivate Repository
+    Service -> Service : Throw "Note not found"
+else Note Found
+    Repository -[#006600]-> Service : Note Entity
+    deactivate Repository
+    
+    Service -> Service : Transform Entity to DTO
+    Service -[#006600]> Controller : Note Details
+end
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Detail Note
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {...}}
+deactivate Server
+deactivate Client
+
+== UPDATE NOTE ==
+
+Client -[#CC3300]> Server : HTTP PUT /api/note/v1/:id\n{title, content}
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Parsing & Validasi
+activate Controller
+
+Controller -> Controller : Validate Update Data
+Controller -[#CC3300]> Service : Fetch -> Modify -> Persist
+activate Service
+
+Service -[#CC3300]> Repository : FindOne dengan Ownership Check
+activate Repository
+Repository -[#CC3300]> DB : SELECT * FROM notes\nWHERE id=? AND user_id=?
+activate DB
+DB -[#006600]-> Repository : Current Note
+deactivate DB
+
+alt Note Not Found
+    Repository -[#990000]-> Service : null (404)
+    deactivate Repository
+    Service -> Service : Throw "Note not found"
+else Note Found
+    Repository -[#006600]-> Service : Existing Note
+    deactivate Repository
+    
+    Service -> Service : Apply Updates to Entity
+    Service -[#CC3300]> Repository : Update Note
+    activate Repository
+    Repository -[#CC3300]> DB : UPDATE notes SET ...
+    activate DB
+    DB -[#006600]-> Repository : Update Success
+    deactivate DB
+    Repository -[#006600]-> Service : Updated Note
+    deactivate Repository
+    
+    Service -[#CC6600]> Publisher : Trigger Re-Embedding (Async)
+    activate Publisher
+    Publisher -[#006600]-> Service : Async Processing Started
+    deactivate Publisher
+end
+
+Service -[#006600]> Controller : Updated Note ID
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Note ID
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {id: ...}}
+deactivate Server
+deactivate Client
+
+== DELETE NOTE ==
+
+Client -[#CC3300]> Server : HTTP DELETE /api/note/v1/:id
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Parsing ID
+activate Controller
+
+Controller -> Controller : Extract Note ID
+Controller -[#CC3300]> Service : Ownership Check -> Transactional Delete
+activate Service
+
+Service -> Service : Begin Transaction
+Service -[#CC3300]> Repository : Check Ownership First
+activate Repository
+Repository -[#CC3300]> DB : SELECT user_id FROM notes WHERE id=?
+activate DB
+DB -[#006600]-> Repository : User ID
+deactivate DB
+
+alt Ownership Mismatch
+    Repository -[#990000]-> Service : null (403)
+    deactivate Repository
+    Service -> Service : Throw "Forbidden"
+else Ownership Valid
+    Repository -[#006600]-> Service : Ownership Confirmed
+    deactivate Repository
+    
+    Service -> Service : Proceed with Transaction
+    
+    Service -[#CC3300]> Repository : Delete Embeddings First
+    activate Repository
+    Repository -[#CC3300]> DB : DELETE FROM note_embeddings WHERE note_id=?
+    activate DB
+    DB -[#006600]-> Repository : Embeddings Deleted
+    deactivate DB
+    Repository -[#006600]-> Service : Embeddings Removed
+    deactivate Repository
+    
+    Service -[#CC3300]> Repository : Delete Note
+    activate Repository
+    Repository -[#CC3300]> DB : DELETE FROM notes WHERE id=?
+    activate DB
+    DB -[#006600]-> Repository : Note Deleted
+    deactivate DB
+    Repository -[#006600]-> Service : Note Deleted
+    deactivate Repository
+    
+    Service -> Service : Commit Transaction
+end
+
+Service -[#006600]> Controller : Delete Success
+deactivate Service
+
+Controller -> Controller : Format Success Response
+Controller -[#006600]> Server : HTTP Response Success
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, message: "Note deleted"}
+deactivate Server
+deactivate Client
+
+@enduml
+

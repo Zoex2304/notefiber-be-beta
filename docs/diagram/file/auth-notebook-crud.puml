@@ -1,0 +1,208 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **Notebook CRUD Operations**\nComplete Notebook Management Flow
+header Notebook Operations Sequence
+footer Page 1 of 1
+
+actor "Client" as Client
+boundary "Server" as Server
+control "JWT Middleware" as JWTMiddleware
+control "Notebook Controller" as Controller
+control "Notebook Service" as Service
+entity "Notebook Repository" as NotebookRepo
+entity "Note Repository" as NoteRepo
+database "Database" as DB
+
+autonumber "<b>[000]"
+
+== GET ALL NOTEBOOKS (with Notes) ==
+
+Client -[#CC3300]> Server : HTTP GET /api/notebook/v1
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Delegasi ke Service
+activate Controller
+
+Controller -[#CC3300]> Service : Fetch Notebooks + Aggregate Notes
+activate Service
+
+Service -[#CC3300]> NotebookRepo : FindAll Notebooks by UserID
+activate NotebookRepo
+NotebookRepo -[#CC3300]> DB : SELECT * FROM notebooks WHERE user_id=?
+activate DB
+DB -[#006600]-> NotebookRepo : List of Notebooks
+deactivate DB
+NotebookRepo -[#006600]-> Service : Notebook Entities
+deactivate NotebookRepo
+
+Service -> Service : Extract Notebook IDs
+Service -[#CC3300]> NoteRepo : FindAll Notes by NotebookIDs
+activate NoteRepo
+NoteRepo -[#CC3300]> DB : SELECT * FROM notes WHERE notebook_id IN (?)
+activate DB
+DB -[#006600]-> NoteRepo : List of Notes
+deactivate DB
+NoteRepo -[#006600]-> Service : Note Entities Grouped by NotebookID
+deactivate NoteRepo
+
+Service -> Service : Map Notes ke masing-masing Notebook
+Service -> Service : Build Nested Structure
+Service -[#006600]> Controller : Notebooks with Nested Notes
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Nested Structure
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: [{notebook: ..., notes: [...]}]}
+deactivate Server
+deactivate Client
+
+== CREATE NOTEBOOK ==
+
+Client -[#CC3300]> Server : HTTP POST /api/notebook/v1\n{name, description, parent_id?}
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Parsing & Validasi
+activate Controller
+
+Controller -> Controller : Validate Input
+Controller -[#CC3300]> Service : Konstruksi Entity dengan Parent Relation
+activate Service
+
+Service -> Service : Build Notebook Entity dengan User ID
+alt parent_id Provided
+    Service -[#CC3300]> NotebookRepo : Validate Parent Exists
+    activate NotebookRepo
+    NotebookRepo -[#CC3300]> DB : SELECT * FROM notebooks WHERE id=?
+    activate DB
+    DB -[#006600]-> NotebookRepo : Parent Notebook
+    deactivate DB
+    NotebookRepo -[#006600]-> Service : Parent Entity
+    deactivate NotebookRepo
+end
+
+Service -[#CC3300]> NotebookRepo : Persistensi Notebook
+activate NotebookRepo
+NotebookRepo -[#CC3300]> DB : INSERT INTO notebooks
+activate DB
+DB -[#006600]-> NotebookRepo : Notebook ID
+deactivate DB
+NotebookRepo -[#006600]-> Service : Created Notebook Entity
+deactivate NotebookRepo
+
+Service -[#006600]> Controller : Notebook ID + Details
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Notebook ID
+deactivate Controller
+
+Server -[#006600]> Client : 201 Created\n{success: true, data: {id: ...}}
+deactivate Server
+deactivate Client
+
+== DELETE NOTEBOOK (Cascade) ==
+
+Client -[#CC3300]> Server : HTTP DELETE /api/notebook/v1/:id
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Parsing ID
+activate Controller
+
+Controller -> Controller : Extract Notebook ID
+Controller -[#CC3300]> Service : Ownership Check -> Transactional Cascade Delete
+activate Service
+
+Service -> Service : Begin Transaction
+Service -[#CC3300]> NotebookRepo : Check Ownership
+activate NotebookRepo
+NotebookRepo -[#CC3300]> DB : SELECT user_id FROM notebooks WHERE id=?
+activate DB
+DB -[#006600]-> NotebookRepo : Owner User ID
+deactivate DB
+NotebookRepo -[#006600]-> Service : Ownership Status
+deactivate NotebookRepo
+
+alt Ownership Mismatch
+    Service -> Service : Throw "Forbidden"
+    Service -> Service : Rollback Transaction
+else Ownership Valid
+    Service -[#CC3300]> NotebookRepo : Delete Notebook
+    activate NotebookRepo
+    NotebookRepo -[#CC3300]> DB : DELETE FROM notebooks WHERE id=?
+    activate DB
+    DB -[#006600]-> NotebookRepo : Notebook Deleted
+    deactivate DB
+    NotebookRepo -[#006600]-> Service : Success
+    deactivate NotebookRepo
+    
+    Service -[#CC3300]> NoteRepo : Delete Note Embeddings by NotebookID
+    activate NoteRepo
+    NoteRepo -[#CC3300]> DB : DELETE FROM note_embeddings\nWHERE note_id IN (SELECT id FROM notes WHERE notebook_id=?)
+    activate DB
+    DB -[#006600]-> NoteRepo : Embeddings Deleted
+    deactivate DB
+    NoteRepo -[#006600]-> Service : Success
+    deactivate NoteRepo
+    
+    Service -[#CC3300]> NotebookRepo : Nullify ParentId of Child Notebooks
+    activate NotebookRepo
+    NotebookRepo -[#CC3300]> DB : UPDATE notebooks SET parent_id=NULL\nWHERE parent_id=?
+    activate DB
+    DB -[#006600]-> NotebookRepo : Child Notebooks Updated
+    deactivate DB
+    NotebookRepo -[#006600]-> Service : Success
+    deactivate NotebookRepo
+    
+    Service -[#CC3300]> NoteRepo : Delete All Notes in Notebook
+    activate NoteRepo
+    NoteRepo -[#CC3300]> DB : DELETE FROM notes WHERE notebook_id=?
+    activate DB
+    DB -[#006600]-> NoteRepo : Notes Deleted
+    deactivate DB
+    NoteRepo -[#006600]-> Service : Success
+    deactivate NoteRepo
+    
+    Service -> Service : Commit Transaction
+end
+
+Service -[#006600]> Controller : Delete Success
+deactivate Service
+
+Controller -> Controller : Format Success Response
+Controller -[#006600]> Server : HTTP Response Success
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, message: "Notebook deleted"}
+deactivate Server
+deactivate Client
+
+@enduml

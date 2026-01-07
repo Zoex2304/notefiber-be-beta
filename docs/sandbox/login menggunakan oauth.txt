@@ -1,0 +1,11 @@
+cmd/rest/main.go
+internal/config/config.go
+internal/server/server.go
+internal/bootstrap/container.go
+internal/controller/oauth_controller.go
+internal/service/oauth_service.go
+internal/repository/implementation/user_repository_impl.go
+internal/repository/unitofwork/unit_of_work_impl.go
+internal/entity/user_entity.go
+internal/entity/user_provider.go
+pkg/database/gorm.go

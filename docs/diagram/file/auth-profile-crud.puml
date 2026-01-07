@@ -1,0 +1,211 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **User Profile Operations**\nComplete User Profile Management Flow
+header User Profile Operations Sequence
+footer Page 1 of 1
+
+actor "Client" as Client
+boundary "Server" as Server
+control "JWT Middleware" as JWTMiddleware
+control "User Controller" as Controller
+control "User Service" as Service
+entity "User Repository" as Repository
+entity "Mapper" as Mapper
+database "Database" as DB
+control "File Storage" as FileStorage
+
+autonumber "<b>[000]"
+
+== GET PROFILE ==
+
+Client -[#CC3300]> Server : HTTP GET /api/user/profile
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Delegasi ke Service
+activate Controller
+
+Controller -[#CC3300]> Service : Fetch User dengan Avatar
+activate Service
+
+Service -[#CC3300]> Repository : GetByIdWithAvatar
+activate Repository
+
+Repository -[#CC3300]> DB : Query dengan JOIN ke user_providers
+activate DB
+DB -[#006600]-> Repository : User Data with Avatar URL
+deactivate DB
+
+Repository -[#CC3300]> Mapper : Model -> Entity
+activate Mapper
+Mapper -[#006600]-> Repository : User Entity with Avatar
+deactivate Mapper
+
+Repository -[#006600]-> Service : User Profile Entity
+deactivate Repository
+
+Service -> Service : Build UserProfileResponse
+Service -[#006600]> Controller : UserProfileResponse
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan UserProfileResponse
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {user: {...}}}
+deactivate Server
+deactivate Client
+
+== UPDATE PROFILE ==
+
+Client -[#CC3300]> Server : HTTP PUT /api/user/profile\n{full_name, email?}
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Parsing & Validasi
+activate Controller
+
+Controller -> Controller : Validate Input Data
+Controller -[#CC3300]> Service : Fetch -> Modify -> Persist
+activate Service
+
+Service -[#CC3300]> Repository : FindOne by User ID
+activate Repository
+Repository -[#CC3300]> DB : SELECT * FROM users WHERE id=?
+activate DB
+DB -[#006600]-> Repository : Current User Data
+deactivate DB
+Repository -[#006600]-> Service : User Entity
+deactivate Repository
+
+Service -> Service : Apply Updates to Entity
+Service -[#CC3300]> Repository : Update User
+activate Repository
+Repository -[#CC3300]> DB : UPDATE users SET full_name=?, updated_at=?
+activate DB
+DB -[#006600]-> Repository : Update Success
+deactivate DB
+Repository -[#006600]-> Service : Updated User Entity
+deactivate Repository
+
+Service -[#006600]> Controller : Update Success
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response Success
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, message: "Profile updated"}
+deactivate Server
+deactivate Client
+
+== UPLOAD AVATAR ==
+
+Client -[#CC3300]> Server : HTTP POST /api/user/avatar\nmultipart/form-data
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Ekstraksi File dari FormData
+activate Controller
+
+Controller -> Controller : Extract Avatar File
+Controller -[#CC3300]> Service : File Processing Pipeline
+activate Service
+
+Service -> Service : Validasi Ukuran File (Max 2MB)
+alt File Too Large
+    Service -> Service : Throw "File too large"
+else File Valid
+    Service -> Service : Generate Unique Filename
+    Service -[#CC6600]> FileStorage : Simpan ke Filesystem
+    activate FileStorage
+    FileStorage -[#006600]-> Service : File Saved
+    deactivate FileStorage
+    
+    Service -> Service : Generate Public URL
+    Service -[#CC3300]> Repository : UpdateAvatar
+    activate Repository
+    Repository -[#CC3300]> DB : UPDATE users SET avatar_url=?
+    activate DB
+    DB -[#006600]-> Repository : Avatar Updated
+    deactivate DB
+    Repository -[#006600]-> Service : Update Success
+    deactivate Repository
+end
+
+Service -[#006600]> Controller : Avatar URL
+deactivate Service
+
+Controller -> Controller : Format Response
+Controller -[#006600]> Server : HTTP Response dengan Avatar URL
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {avatar_url: "..."}}
+deactivate Server
+deactivate Client
+
+== DELETE ACCOUNT ==
+
+Client -[#CC3300]> Server : HTTP DELETE /api/user/account
+activate Client
+activate Server
+
+Server -[#CC3300]> JWTMiddleware : Ekstraksi User ID
+activate JWTMiddleware
+JWTMiddleware -[#006600]-> Server : User ID
+deactivate JWTMiddleware
+
+Server -[#CC3300]> Controller : Delegasi ke Service
+activate Controller
+
+Controller -[#CC3300]> Service : Soft Delete User
+activate Service
+
+Service -> Service : Prepare Soft Delete
+Service -[#CC3300]> Repository : Delete (Soft)
+activate Repository
+
+Repository -[#CC3300]> DB : UPDATE users SET deleted_at=NOW() WHERE id=?
+activate DB
+DB -[#006600]-> Repository : User Soft Deleted
+deactivate DB
+
+Repository -[#006600]-> Service : Delete Success
+deactivate Repository
+
+Service -[#006600]> Controller : Delete Success
+deactivate Service
+
+Controller -> Controller : Format Success Response
+Controller -[#006600]> Server : HTTP Response Success
+deactivate Controller
+
+Server -[#006600]> Client : 200 OK\n{success: true, message: "Account deleted"}
+deactivate Server
+deactivate Client
+
+@enduml

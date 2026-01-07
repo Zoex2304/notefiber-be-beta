@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  # PostgreSQL - Main Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: notif_postgres
+    environment:
+      POSTGRES_DB: notification_db
+      POSTGRES_USER: admin
+      POSTGRES_PASSWORD: admin123
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U admin"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notif_network
+
+  # Redis - Caching & Pub/Sub
+  redis:
+    image: redis:7-alpine
+    container_name: notif_redis
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notif_network
+
+  # NATS - Message Broker
+  nats:
+    image: nats:2.10-alpine
+    container_name: notif_nats
+    ports:
+      - "4222:4222"  # Client connections
+      - "8222:8222"  # HTTP monitoring
+    command: 
+      - "-js"        # Enable JetStream (persistent messaging)
+      - "-m=8222"    # Monitoring port
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notif_network
+
+volumes:
+  postgres_data:
+  redis_data:
+
+networks:
+  notif_network:
+    driver: bridge

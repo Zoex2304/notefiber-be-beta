@@ -1,0 +1,88 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 13
+}
+
+title **Login Flow**\nPOST /api/auth/login
+header API Authentication Sequence
+footer Page 1 of 1
+
+actor "HTTP Client" as Client
+boundary "Server" as Server
+control "Controller" as Controller
+control "Service" as Service
+control "Unit of Work" as UoW
+entity "Repository" as Repository
+entity "Mapper" as Mapper
+entity "Model" as Model
+database "Database" as Database
+
+autonumber "<b>[000]"
+
+Client -[#CC3300]> Server : POST /api/auth/login
+activate Client
+
+Server -[#CC3300]> Controller : Routing & Middleware
+activate Server
+activate Controller
+
+Controller -> Controller : Parsing & Ekstraksi Metadata Klien
+Controller -[#CC3300]> Service : Orkestrasi Logika Autentikasi
+deactivate Controller
+activate Service
+
+Service -[#CC3300]> UoW : Manajemen Akses Data
+activate UoW
+
+UoW -[#CC3300]> Repository : Pencarian User & Validasi
+activate Repository
+
+Repository -[#CC3300]> Mapper : Transformasi Model -> Entity
+activate Mapper
+
+Mapper -[#CC3300]> Model : Representasi Tabel Database
+activate Model
+
+Model -[#CC3300]> Database : Query Data
+activate Database
+Database -[#006600]-> Model : Data Result
+deactivate Database
+
+Model -[#006600]-> Mapper : Model Data
+deactivate Model
+
+Mapper -[#006600]-> Repository : Entity
+deactivate Mapper
+
+Repository -[#006600]-> Service : User Entity
+deactivate Repository
+
+UoW -> UoW : Close Transaction
+UoW -[#006600]-> Service : Data Ready
+deactivate UoW
+
+Service -> Service : Validasi Kredensial: Bcrypt Compare
+Service -> Service : Generasi Token: JWT Access Token
+
+alt Remember Me = true
+    Service -> Service : Persistensi Session: Refresh Token
+end
+
+Service -[#006600]-> Server : HTTP Response JSON dengan Token
+deactivate Service
+
+Server -> Server : Format Response
+Server -[#006600]-> Client : JSON Response
+deactivate Server
+
+Client -> Client : Store Token
+deactivate Client
+
+@enduml
+

@@ -1,0 +1,224 @@
+﻿
+@startuml
+skinparam sequence {
+  ActorBorderColor #333333
+  LifeLineBorderColor #666666
+  LifeLineBackgroundColor #F5F5F5
+  ParticipantBorderColor #333333
+  ParticipantBackgroundColor #E8E8E8
+  ParticipantFontSize 12
+}
+
+title **Billing & Usage Flow**\nPlan, Usage, Subscription, and Refund Operations
+header Billing & Usage Management Sequence
+footer Page 1 of 1
+
+actor "Client" as Client
+boundary "Server" as Server
+control "Plan Controller" as PlanCtrl
+control "User Controller" as UserCtrl
+control "Payment Controller" as PaymentCtrl
+control "Plan Service" as PlanService
+control "User Service" as UserService
+control "Payment Service" as PaymentService
+entity "Plan Repository" as PlanRepo
+entity "User Repository" as UserRepo
+entity "Subscription Repository" as SubRepo
+entity "Refund Repository" as RefundRepo
+database "Database" as DB
+
+autonumber "<b>[000]"
+
+== GET ALL PLANS (Public) ==
+
+Client -[#CC3300]> Server : HTTP GET /api/plans
+activate Client
+activate Server
+
+Server -[#CC3300]> PlanCtrl : Delegasi ke Service
+activate PlanCtrl
+
+PlanCtrl -[#CC3300]> PlanService : Fetch Active Plans dengan Features
+activate PlanService
+
+PlanService -[#CC3300]> PlanRepo : FindAllPlans dengan Preload Features
+activate PlanRepo
+PlanRepo -[#CC3300]> DB : SELECT plans.*, features.*\nFROM plans\nLEFT JOIN plan_features ON plans.id = plan_features.plan_id\nWHERE active = true
+activate DB
+DB -[#006600]-> PlanRepo : Plans with Features Data
+deactivate DB
+PlanRepo -[#006600]-> PlanService : Plan Entities with Features
+deactivate PlanRepo
+
+PlanService -> PlanService : Transform to Plans & Limits DTO
+PlanService -[#006600]> PlanCtrl : Plans & Limits
+deactivate PlanService
+
+PlanCtrl -> PlanCtrl : Format Response
+PlanCtrl -[#006600]> Server : HTTP Response dengan Plans & Limits
+deactivate PlanCtrl
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: [{plan: ..., features: [...]}]}
+deactivate Server
+deactivate Client
+
+== GET USAGE STATUS (Protected) ==
+
+Client -[#CC3300]> Server : HTTP GET /api/user/usage-status
+activate Client
+activate Server
+
+note right of Server : JWT Middleware: Ekstraksi User ID
+
+Server -[#CC3300]> UserCtrl : Delegasi ke Service
+activate UserCtrl
+
+UserCtrl -[#CC3300]> UserService : Aggregate Usage Data
+activate UserService
+
+UserService -[#CC3300]> UserRepo : Get User's Active Plan
+activate UserRepo
+UserRepo -[#CC3300]> DB : Query for active subscription
+activate DB
+DB -[#006600]-> UserRepo : Active Plan Info
+deactivate DB
+UserRepo -[#006600]-> UserService : Active Plan Data
+deactivate UserRepo
+
+UserService -[#CC3300]> UserRepo : Count Notebooks
+activate UserRepo
+UserRepo -[#CC3300]> DB : SELECT COUNT(*) FROM notebooks WHERE user_id=?
+activate DB
+DB -[#006600]-> UserRepo : Notebook Count
+deactivate DB
+UserRepo -[#006600]-> UserService : Notebook Count
+deactivate UserRepo
+
+UserService -[#CC3300]> UserRepo : Count Notes
+activate UserRepo
+UserRepo -[#CC3300]> DB : SELECT COUNT(*) FROM notes WHERE user_id=?
+activate DB
+DB -[#006600]-> UserRepo : Note Count
+deactivate DB
+UserRepo -[#006600]-> UserService : Note Count
+deactivate UserRepo
+
+UserService -> UserService : Calculate: Daily Limit Reset Time
+UserService -> UserService : Build UsageStatusResponse
+UserService -[#006600]> UserCtrl : UsageStatusResponse
+deactivate UserService
+
+UserCtrl -> UserCtrl : Format Response
+UserCtrl -[#006600]> Server : HTTP Response dengan UsageStatusResponse
+deactivate UserCtrl
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {usage: {...}}}
+deactivate Server
+deactivate Client
+
+== GET SUBSCRIPTION STATUS (Protected) ==
+
+Client -[#CC3300]> Server : HTTP GET /api/payment/status
+activate Client
+activate Server
+
+note right of Server : JWT Middleware: Ekstraksi User ID
+
+Server -[#CC3300]> PaymentCtrl : Delegasi ke PaymentService
+activate PaymentCtrl
+
+PaymentCtrl -[#CC3300]> PaymentService : Find Active Subscription
+activate PaymentService
+
+PaymentService -[#CC3300]> SubRepo : FindAllSubscriptions by UserID
+activate SubRepo
+SubRepo -[#CC3300]> DB : SELECT * FROM subscriptions WHERE user_id=?
+activate DB
+DB -[#006600]-> SubRepo : User's Subscriptions
+deactivate DB
+SubRepo -[#006600]-> PaymentService : Subscription Entities
+deactivate SubRepo
+
+PaymentService -> PaymentService : Filter: Status Active & Period Valid
+PaymentService -[#CC3300]> SubRepo : Get Plan Details for Active Subscription
+activate SubRepo
+SubRepo -[#CC3300]> DB : JOIN with plans table
+activate DB
+DB -[#006600]-> SubRepo : Subscription with Plan Details
+deactivate DB
+SubRepo -[#006600]-> PaymentService : Active Subscription with Plan
+deactivate SubRepo
+
+PaymentService -> PaymentService : Build SubscriptionStatusResponse
+PaymentService -[#006600]> PaymentCtrl : SubscriptionStatusResponse
+deactivate PaymentService
+
+PaymentCtrl -> PaymentCtrl : Format Response
+PaymentCtrl -[#006600]> Server : HTTP Response dengan SubscriptionStatusResponse
+deactivate PaymentCtrl
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {subscription: {...}}}
+deactivate Server
+deactivate Client
+
+== REQUEST REFUND (Protected) ==
+
+Client -[#CC3300]> Server : HTTP POST /api/user/refund/request\n{subscription_id, reason}
+activate Client
+activate Server
+
+note right of Server : JWT Middleware: Ekstraksi User ID
+
+Server -[#CC3300]> PaymentCtrl : Validasi Request
+activate PaymentCtrl
+
+PaymentCtrl -> PaymentCtrl : Validate Request Body
+PaymentCtrl -[#CC3300]> PaymentService : RequestRefund
+activate PaymentService
+
+PaymentService -[#CC3300]> SubRepo : Validate Subscription Ownership
+activate SubRepo
+SubRepo -[#CC3300]> DB : SELECT * FROM subscriptions WHERE id=? AND user_id=?
+activate DB
+DB -[#006600]-> SubRepo : Subscription Data
+deactivate DB
+SubRepo -[#006600]-> PaymentService : Subscription Entity
+deactivate SubRepo
+
+PaymentService -> PaymentService : Check: Subscription Active & Paid
+PaymentService -[#CC3300]> RefundRepo : Check: No Existing Refund
+activate RefundRepo
+RefundRepo -[#CC3300]> DB : SELECT * FROM refunds WHERE subscription_id=?
+activate DB
+DB -[#006600]-> RefundRepo : Existing Refund or Null
+deactivate DB
+RefundRepo -[#006600]-> PaymentService : Refund Status
+deactivate RefundRepo
+
+alt Invalid Conditions
+    PaymentService -> PaymentService : Throw Validation Error
+else All Conditions Valid
+    PaymentService -> Service : Begin Transaction
+    PaymentService -[#CC3300]> RefundRepo : Create Refund (Pending)
+    activate RefundRepo
+    RefundRepo -[#CC3300]> DB : INSERT INTO refunds (status='pending')
+    activate DB
+    DB -[#006600]-> RefundRepo : Refund ID
+    deactivate DB
+    RefundRepo -[#006600]-> PaymentService : Refund Created
+    deactivate RefundRepo
+    PaymentService -> Service : Commit Transaction
+end
+
+PaymentService -[#006600]> PaymentCtrl : RefundId & Status
+deactivate PaymentService
+
+PaymentCtrl -> PaymentCtrl : Format Response
+PaymentCtrl -[#006600]> Server : HTTP Response dengan RefundId & Status
+deactivate PaymentCtrl
+
+Server -[#006600]> Client : 200 OK\n{success: true, data: {refund_id: ..., status: "pending"}}
+deactivate Server
+deactivate Client
+
+@enduml
