@@ -2,6 +2,7 @@ package server
 
 import (
 	"log"
+	"os"
 
 	"ai-notetaking-be/internal/bootstrap"
 	"ai-notetaking-be/internal/config"
@@ -35,9 +36,17 @@ func New(cfg *config.Config, container *bootstrap.Container) *Server {
 	}))
 
 	// OpenTelemetry tracing middleware (traces all HTTP requests)
-	app.Use(otelfiber.Middleware())
+	// Only enable if OTEL_ENABLED is true
+	if os.Getenv("OTEL_ENABLED") == "true" {
+		app.Use(otelfiber.Middleware())
+	}
 
 	app.Use(serverutils.ErrorHandlerMiddleware())
+
+	// Health Check Endpoint
+	app.Get("/health", func(c *fiber.Ctx) error {
+		return c.SendString("OK")
+	})
 
 	// Static
 	app.Static("/uploads", "./uploads")
