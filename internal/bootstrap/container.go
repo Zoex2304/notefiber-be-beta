@@ -116,9 +116,14 @@ func NewContainer(db *gorm.DB, cfg *config.Config) *Container {
 	}
 
 	// Redis
-	rdb := redis.NewClient(&redis.Options{
-		Addr: cfg.App.RedisURL,
-	})
+	opt, err := redis.ParseURL(cfg.App.RedisURL)
+	if err != nil {
+		log.Printf("[WARN] Failed to parse Redis URL: %v. Using direct Addr", err)
+		opt = &redis.Options{
+			Addr: cfg.App.RedisURL,
+		}
+	}
+	rdb := redis.NewClient(opt)
 	if _, err := rdb.Ping(context.Background()).Result(); err != nil {
 		log.Printf("[WARN] Failed to connect to Redis: %v", err)
 	}

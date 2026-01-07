@@ -49,7 +49,11 @@ func NewOAuthService(uowFactory unitofwork.RepositoryFactory) IOAuthService {
 	}
 
 	log.Printf("[OAuth Service] Initialized with:")
-	log.Printf("  - Client ID: %s", conf.ClientID[:10]+"...")
+	maskedClientID := "NOT_SET"
+	if len(conf.ClientID) > 10 {
+		maskedClientID = conf.ClientID[:10] + "..."
+	}
+	log.Printf("  - Client ID: %s", maskedClientID)
 	log.Printf("  - Redirect URL: %s", conf.RedirectURL)
 
 	return &oauthService{
