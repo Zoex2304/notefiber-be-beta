@@ -95,6 +95,7 @@ func NewContainer(db *gorm.DB, cfg *config.Config) *Container {
 		cfg.Ai.LLMProvider,
 		cfg.Ai.LLMModel,
 		cfg.Ai.OllamaBaseURL,
+		cfg.Keys.HuggingFace,
 	)
 	if err != nil {
 		log.Fatalf("[FATAL] Failed to initialize LLM Provider: %v", err)
